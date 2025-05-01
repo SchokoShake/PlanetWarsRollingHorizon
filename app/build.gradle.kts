@@ -54,7 +54,7 @@ tasks.withType<Test>().configureEach {
 
 tasks.withType<Jar> {
     manifest {
-        attributes["Main-Class"] = "client_server.MultiRTSServer"
+        attributes["Main-Class"] = "games.planetwars.view.RunVisualGameKt"
     }
 }
 
@@ -78,7 +78,7 @@ java {
 }
 
 application {
-    mainClass.set("client_server.MultiRTSServerKt") // Adjust this if your package structure is different
+    mainClass.set("games.planetwars.view.RunVisualGameKt") // Adjust this if your package structure is different
 }
 
 kotlin {
