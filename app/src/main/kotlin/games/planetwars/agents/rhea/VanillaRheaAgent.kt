@@ -63,7 +63,7 @@ data class VanillaRheaAgent(
         var sequenceLength: Int = 200,
         var populationSize: Int = 20,
         var mutationProbability: Double = 0.5,
-        var opponentModel: PlanetWarsAgent = DoNothingAgent(),
+        var evaluationOpponentAgent: PlanetWarsAgent = DoNothingAgent(),
         ): PlanetWarsPlayer() {
     data class ScoredSolution(val score: Double, val solution: FloatArray)
 
@@ -126,16 +126,16 @@ data class VanillaRheaAgent(
 
     // random point in n-dimensional space in unit hypercube; n = sequenceLength
     private fun randomSequence(length: Int): FloatArray {
-        val p = FloatArray(length)
-        for (i in p.indices) {
-            p[i] = random.nextFloat()
+        val sequence = FloatArray(length)
+        for (i in sequence.indices) {
+            sequence[i] = random.nextFloat()
         }
-        return p
+        return sequence
     }
 
-    private fun evaluateSequence(state: GameState, seq: FloatArray): Double {
-        val wrapper = GameStateWrapper(state.deepCopy(), params, player, opponentModel)
-        wrapper.runForwardModel(seq)
+    private fun evaluateSequence(state: GameState, sequence: FloatArray): Double {
+        val wrapper = GameStateWrapper(state.deepCopy(), params, player, evaluationOpponentAgent)
+        wrapper.runForwardModel(sequence)
         return wrapper.scoreDifference()
     }
 }
