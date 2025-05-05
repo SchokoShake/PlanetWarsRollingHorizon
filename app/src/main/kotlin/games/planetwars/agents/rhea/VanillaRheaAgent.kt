@@ -67,7 +67,7 @@ data class VanillaRheaAgent(
         ): PlanetWarsPlayer() {
     data class ScoredSolution(val score: Double, val solution: FloatArray)
 
-    var predecessor: ScoredSolution? = null
+    private var predecessor: ScoredSolution? = null
 
     internal var random = Random
 
@@ -102,7 +102,20 @@ data class VanillaRheaAgent(
         return action
     }
 
-    private fun mutate(v: FloatArray, mutProb: Double): FloatArray {}
+    private fun mutate(parents: FloatArray, mutProb: Double): FloatArray {
+        val n = parents.size
+        val mutated = FloatArray(n)
+        // possibly crossover parents
+        // mutate resulting sequences
+        for (i in 0 until n) {
+            if (random.nextDouble() < mutProb) {
+                mutated[i] = random.nextFloat()
+            } else {
+                mutated[i] = parents[i]
+            }
+        }
+        return mutated
+    }
 
     private fun fillShiftedSequenceWithRandomValues(sequence: FloatArray, count: Int): FloatArray {
         val start = sequence.size - count
@@ -124,7 +137,7 @@ data class VanillaRheaAgent(
         return "RheaAgent-$sequenceLength-$populationSize-$mutationProbability"
     }
 
-    // random point in n-dimensional space in unit hypercube; n = sequenceLength
+    // random sequence of length n
     private fun randomSequence(length: Int): FloatArray {
         val sequence = FloatArray(length)
         for (i in sequence.indices) {
