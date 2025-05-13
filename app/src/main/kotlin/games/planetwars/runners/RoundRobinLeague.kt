@@ -6,14 +6,37 @@ import games.planetwars.agents.evo.SimpleEvoAgent
 import games.planetwars.agents.random.BetterRandomAgent
 import games.planetwars.agents.random.CarefulRandomAgent
 import games.planetwars.agents.random.PureRandomAgent
+import games.planetwars.agents.rhea.ParentSelectionStrategy
+import games.planetwars.agents.rhea.RheaAgent
+import games.planetwars.agents.rhea.RheaAgentMultipleParents
+import games.planetwars.agents.rhea.VanillaRheaAgent
 import games.planetwars.core.GameParams
 import games.planetwars.core.Player
 
 fun main() {
 //    val agents = SamplePlayerLists().getRandomTrio()
-    val agents = SamplePlayerLists().getFullList()
+    var agents = mutableListOf<PlanetWarsAgent>(
+            RheaAgent(
+                    parentSelectionStrategy = ParentSelectionStrategy.Roulette,
+                    parentCount = 5,
+                    sequenceLength = 200
+                    , mutationProbability = 0.8,
+                    populationSize = 15),
+            RheaAgent(
+                    parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.5),
+                    parentCount = 5,
+                    sequenceLength = 200
+                    , mutationProbability = 0.8,
+                    populationSize = 15),
+            RheaAgentMultipleParents(
+                    parentCount = 5,
+                    sequenceLength = 200, evaluationOpponentAgent = CarefulRandomAgent(),
+                    mutationProbability = 0.8,
+                    populationSize = 15),)
+
+
 //    agents.add(DoNothingAgent())
-    val league = RoundRobinLeague(agents, gamesPerPair = 5)
+    val league = RoundRobinLeague(agents, gamesPerPair = 10)
     val results = league.runRoundRobin()
     // use the League utils to print the results
     println(results)
@@ -51,6 +74,10 @@ class SamplePlayerLists {
                 opponentModel = DoNothingAgent(),
                 probMutation = 0.8,
             ),
+                VanillaRheaAgent(
+                        sequenceLength = 400
+                        , mutationProbability = 0.8,
+                        populationSize = 30)
         )
     }
 }
