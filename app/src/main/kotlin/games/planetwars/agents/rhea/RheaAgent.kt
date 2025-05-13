@@ -36,7 +36,6 @@ sealed class ParentSelectionStrategy {
 data class RheaAgent(
         var sequenceLength: Int = 200,
         var populationSize: Int = 20,
-        var parentCount: Int = 2,
         var mutationProbability: Double = 0.5,
         var evaluationOpponentAgent: PlanetWarsAgent = DoNothingAgent(),
         var parentSelectionStrategy: ParentSelectionStrategy = ParentSelectionStrategy.Random
@@ -52,7 +51,7 @@ data class RheaAgent(
         // shift predecessors so they reflect current turn
         // if no predecessor exists create one
         if (predecessors.isEmpty()) {
-            for (i in 0 until parentCount) {
+            for (i in 0 until populationSize) {
                 val solution = randomSequence(sequenceLength)
                 val score = evaluateSequence(gameState, solution)
                 predecessors.add(ScoredSolution(score, solution))
@@ -173,7 +172,7 @@ data class RheaAgent(
     }
 
     override fun getAgentType(): String {
-        return "RheaAgent-$sequenceLength-$populationSize-$parentCount-$mutationProbability-(${evaluationOpponentAgent.getAgentType()})-$parentSelectionStrategy"
+        return "RheaAgent-$sequenceLength-$populationSize-$mutationProbability-(${evaluationOpponentAgent.getAgentType()})-$parentSelectionStrategy"
     }
 
     // random sequence of length n

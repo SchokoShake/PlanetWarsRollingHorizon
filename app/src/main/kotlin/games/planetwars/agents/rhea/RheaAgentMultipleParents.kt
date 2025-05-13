@@ -112,6 +112,7 @@ data class RheaAgentMultipleParents(
     }
 
     private fun evaluateSequence(state: GameState, sequence: FloatArray): Double {
+        evaluationOpponentAgent.prepareToPlayAs(player.opponent(),params)
         val wrapper = GameStateWrapper(state.deepCopy(), params, player, evaluationOpponentAgent)
         wrapper.runForwardModel(sequence)
         return wrapper.scoreDifference()

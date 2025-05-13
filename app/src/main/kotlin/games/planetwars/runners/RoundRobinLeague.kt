@@ -18,13 +18,16 @@ fun main() {
     var agents = mutableListOf<PlanetWarsAgent>(
             RheaAgent(
                     parentSelectionStrategy = ParentSelectionStrategy.Roulette,
-                    parentCount = 5,
                     sequenceLength = 200
                     , mutationProbability = 0.8,
                     populationSize = 15),
             RheaAgent(
                     parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.5),
-                    parentCount = 5,
+                    sequenceLength = 200
+                    , mutationProbability = 0.8,
+                    populationSize = 15),
+            RheaAgent(
+                    parentSelectionStrategy = ParentSelectionStrategy.Rank,
                     sequenceLength = 200
                     , mutationProbability = 0.8,
                     populationSize = 15),
