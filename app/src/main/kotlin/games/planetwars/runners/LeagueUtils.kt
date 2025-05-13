@@ -6,6 +6,7 @@ data class LeagueEntry(
     val agentName: String,
     var points: Double = 0.0,
     var nGames: Int = 0,
+        var timePerTurnInMs: Double=0.0,
 ) {
     fun winRate(): Double {
         return 100 * points  / nGames

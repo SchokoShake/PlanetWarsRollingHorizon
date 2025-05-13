@@ -134,7 +134,7 @@ data class VanillaRheaAgent(
     }
 
     override fun getAgentType(): String {
-        return "RheaAgent-$sequenceLength-$populationSize-$mutationProbability"
+        return "RheaAgent-$sequenceLength-$populationSize-$mutationProbability-1-(${evaluationOpponentAgent.getAgentType()})"
     }
 
     // random sequence of length n
@@ -147,6 +147,7 @@ data class VanillaRheaAgent(
     }
 
     private fun evaluateSequence(state: GameState, sequence: FloatArray): Double {
+        evaluationOpponentAgent.prepareToPlayAs(player=player.opponent(),params=params);
         val wrapper = GameStateWrapper(state.deepCopy(), params, player, evaluationOpponentAgent)
         wrapper.runForwardModel(sequence)
         return wrapper.scoreDifference()

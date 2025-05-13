@@ -12,14 +12,14 @@ import games.planetwars.core.Player
 import xkg.jvm.AppLauncher
 
 fun main() {
-    val gameParams = GameParams(numPlanets = 20, maxTicks = 1000)
+    val gameParams = GameParams(numPlanets = 20, maxTicks = 1000, width = 1500)
     val gameState = GameStateFactory(gameParams).createGame()
 //    val agent2 = BetterRandomAgent()
 //    val agent1 = PureRandomAgent()
     val agent2 = SimpleEvoAgent()
-    val evaluateOpponent=SimpleEvoAgent(sequenceLength = 100, nEvals = 10)
+    val evaluateOpponent=CarefulRandomAgent()
     evaluateOpponent.prepareToPlayAs(Player.Player2, GameParams())
-    val agent1 = VanillaRheaAgent(evaluationOpponentAgent = evaluateOpponent)
+    val agent1 = VanillaRheaAgent(evaluationOpponentAgent = evaluateOpponent, sequenceLength = 200)
 
 //    val agent1 = games.planetwars.agents.DoNothingAgent()
 //    val agent1 = games.planetwars.agents.BetterRandomAgent()
@@ -29,7 +29,14 @@ fun main() {
     AppLauncher(
         preferredWidth = gameParams.width,
         preferredHeight = gameParams.height,
-        app = GameView(params = gameParams, gameState = gameState, gameRunner = gameRunner),
+        app = GameView(params = gameParams,
+                gameState = gameState,
+                gameRunner = gameRunner,
+                showInfoFor = setOf(
+                        Player.Player1,
+                        Player.Player2,
+                        Player.Neutral,
+                        )),
         title = title,
         frameRate = 50.0,
     ).launch()
