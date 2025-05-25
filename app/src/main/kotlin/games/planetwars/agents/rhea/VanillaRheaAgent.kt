@@ -134,7 +134,7 @@ data class VanillaRheaAgent(
     }
 
     override fun getAgentType(): String {
-        return "RheaAgent-$sequenceLength-$populationSize-$mutationProbability-1-(${evaluationOpponentAgent.getAgentType()})"
+        return "VRA-$sequenceLength-$populationSize-$mutationProbability-1-(${evaluationOpponentAgent.getAgentType()})"
     }
 
     // random sequence of length n

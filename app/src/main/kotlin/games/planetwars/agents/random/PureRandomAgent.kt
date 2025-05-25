@@ -14,7 +14,7 @@ class PureRandomAgent() : PlanetWarsPlayer() {
     }
 
     override fun getAgentType(): String {
-        return "Pure Random Agent"
+        return "PRA"
     }
 }
 

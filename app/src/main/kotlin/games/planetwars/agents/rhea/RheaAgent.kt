@@ -9,7 +9,29 @@ import games.planetwars.core.*
 import kotlin.random.Random
 import kotlin.random.nextInt
 
+sealed class Crossover {
+    abstract fun getParameter(): Double
+    data object Uniform : Crossover() {
+        override fun toString(): String {
+            return "U"
+        }
+        override fun getParameter() = 1.0
+    }
+    data object None : Crossover() {
+        override fun toString(): String {
+            return "No"
+        }
+        override fun getParameter() = 1.0
+    }
 
+    class N_Point(val t: Double) :  Crossover() {
+        override fun getParameter() = t
+        override fun toString(): String {
+            return "N($t)"
+        }
+    }
+
+}
 sealed class ParentSelectionStrategy {
     abstract fun getParameter(): Double
 
@@ -33,12 +55,16 @@ sealed class ParentSelectionStrategy {
     }
 }
 
+
+
 data class RheaAgent(
         var sequenceLength: Int = 200,
         var populationSize: Int = 20,
+        var numberElites: Int = 5,
         var mutationProbability: Double = 0.5,
         var evaluationOpponentAgent: PlanetWarsAgent = DoNothingAgent(),
-        var parentSelectionStrategy: ParentSelectionStrategy = ParentSelectionStrategy.Random
+        var parentSelectionStrategy: ParentSelectionStrategy = ParentSelectionStrategy.Random,
+        var crossover: Crossover = Crossover.None
 ) : PlanetWarsPlayer() {
     data class ScoredSolution(val score: Double, val solution: FloatArray)
 
@@ -66,14 +92,16 @@ data class RheaAgent(
                 ScoredSolution(evaluateSequence(gameState, shifted), shifted)
             }.toMutableList()
         }
-        var population = mutableListOf<ScoredSolution>()
+        var population = predecessors.subList(0,minOf(numberElites, populationSize)).toMutableList()
         // mutate Predecessors until populationSize is reached
-        for (i in 0 until populationSize) {
+        for (i in population.size until populationSize) {
             // choose which predecessor to mutate, currently we have two so just pick at random
-            val parent = selectParent(predecessors)
 
-            // mutate it
-            val mutatedSequence = mutate(parent.solution, mutationProbability)
+            val parent1 = selectParent(predecessors)
+            val parent2 = selectParent(predecessors)
+
+            // cross over, then mutate it
+            val mutatedSequence = mutate(crossover(parent1,parent2), mutationProbability)
 
             // calculate its score
             val mutatedScore = evaluateSequence(gameState, mutatedSequence)
@@ -86,6 +114,46 @@ data class RheaAgent(
         val wrapper = GameStateWrapper(gameState, params, player)
         val action = wrapper.getAction(gameState, best.solution[0], best.solution[1])
         return action
+    }
+
+    private fun crossover(parent1: RheaAgent.ScoredSolution, parent2: RheaAgent.ScoredSolution): FloatArray {
+        return when (crossover) {
+            is Crossover.N_Point -> n_pointCrossover(parent1,parent2)
+            Crossover.Uniform -> uniformCrossover(parent1,parent2)
+            else -> parent1.solution
+        }
+    }
+
+    private fun uniformCrossover(parent1: RheaAgent.ScoredSolution, parent2: RheaAgent.ScoredSolution): FloatArray {
+        val g1 = parent1.solution
+        val g2 = parent2.solution
+        require(g1.size == g2.size) { "Genome lengths differ" }
+
+        return FloatArray(g1.size) { i ->
+            if (random.nextBoolean()) g1[i] else g2[i]
+        }
+    }
+
+    private fun n_pointCrossover(parent1: RheaAgent.ScoredSolution, parent2: RheaAgent.ScoredSolution): FloatArray {
+        val g1 = parent1.solution
+        val g2 = parent2.solution
+        val len = g1.size
+
+        var nPoints=(crossover.getParameter()*len).toInt()
+
+        // unique, sorted cut positions in (0, len)
+        val cuts = (1 until len).shuffled(random).take(nPoints).sorted()
+        val offspring = FloatArray(len)
+
+        var srcFromFirst = true
+        var prev = 0
+        for (cut in cuts + len) {
+            val src = if (srcFromFirst) g1 else g2
+            System.arraycopy(src, prev, offspring, prev, cut - prev)
+            srcFromFirst = !srcFromFirst
+            prev = cut
+        }
+        return offspring
     }
 
     private fun selectParent(predecessors: MutableList<ScoredSolution>): ScoredSolution {
@@ -172,7 +240,7 @@ data class RheaAgent(
     }
 
     override fun getAgentType(): String {
-        return "RheaAgent-$sequenceLength-$populationSize-$mutationProbability-(${evaluationOpponentAgent.getAgentType()})-$parentSelectionStrategy"
+        return "RheaAgent-$sequenceLength-$populationSize-$mutationProbability-(${evaluationOpponentAgent.getAgentType()})-$parentSelectionStrategy-$crossover"
     }
 
     // random sequence of length n

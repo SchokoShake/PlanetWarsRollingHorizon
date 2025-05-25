@@ -28,7 +28,7 @@ class BetterRandomAgent() : PlanetWarsPlayer() {
     }
 
     override fun getAgentType(): String {
-        return "Better Random Agent"
+        return "BRA"
     }
 }
 

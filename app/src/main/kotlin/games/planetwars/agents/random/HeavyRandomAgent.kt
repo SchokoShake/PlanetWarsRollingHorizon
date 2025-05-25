@@ -29,5 +29,5 @@ class HeavyRandomAgent(val delayMillis: Int) : PlanetWarsPlayer() {
         return Action(player, source.id, target.id, source.nShips / 2)
     }
 
-    override fun getAgentType(): String = "Heavy Computation Agent"
+    override fun getAgentType(): String = "HCA"
 }

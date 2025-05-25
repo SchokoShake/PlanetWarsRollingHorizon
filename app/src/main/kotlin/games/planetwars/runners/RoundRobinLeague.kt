@@ -6,6 +6,7 @@ import games.planetwars.agents.evo.SimpleEvoAgent
 import games.planetwars.agents.random.BetterRandomAgent
 import games.planetwars.agents.random.CarefulRandomAgent
 import games.planetwars.agents.random.PureRandomAgent
+import games.planetwars.agents.rhea.Crossover
 import games.planetwars.agents.rhea.ParentSelectionStrategy
 import games.planetwars.agents.rhea.RheaAgent
 import games.planetwars.agents.rhea.RheaAgentMultipleParents
@@ -20,16 +21,18 @@ fun main() {
                     parentSelectionStrategy = ParentSelectionStrategy.Roulette,
                     sequenceLength = 200
                     , mutationProbability = 0.8,
+                    crossover = Crossover.Uniform,
                     populationSize = 15),
             RheaAgent(
-                    parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.5),
+                    parentSelectionStrategy = ParentSelectionStrategy.Roulette,
                     sequenceLength = 200
                     , mutationProbability = 0.8,
                     populationSize = 15),
             RheaAgent(
-                    parentSelectionStrategy = ParentSelectionStrategy.Rank,
+                    parentSelectionStrategy = ParentSelectionStrategy.Roulette,
                     sequenceLength = 200
                     , mutationProbability = 0.8,
+                    crossover = Crossover.N_Point(0.7),
                     populationSize = 15),
             RheaAgentMultipleParents(
                     parentCount = 5,
