@@ -7,7 +7,6 @@ import games.planetwars.agents.PlanetWarsPlayer
 import games.planetwars.agents.evo.GameStateWrapper
 import games.planetwars.core.*
 import kotlin.random.Random
-import kotlin.random.nextInt
 
 sealed class Crossover {
     abstract fun getParameter(): Double
@@ -32,6 +31,7 @@ sealed class Crossover {
     }
 
 }
+
 sealed class ParentSelectionStrategy {
     abstract fun getParameter(): Double
 
@@ -54,7 +54,6 @@ sealed class ParentSelectionStrategy {
         override fun getParameter() = 1.0
     }
 }
-
 
 
 data class RheaAgent(
@@ -92,31 +91,46 @@ data class RheaAgent(
                 ScoredSolution(evaluateSequence(gameState, shifted), shifted)
             }.toMutableList()
         }
-        var population = predecessors.subList(0,minOf(numberElites, populationSize)).toMutableList()
+
+        // elitism: keep best individuals from predecessors
+        val population = predecessors
+            .sortedByDescending { it.score }
+            .take(minOf(numberElites, populationSize))
+            .toMutableList()
+
         // mutate Predecessors until populationSize is reached
         for (i in population.size until populationSize) {
-            // choose which predecessor to mutate, currently we have two so just pick at random
 
+            // choose 2 parents and make sure not to choose the same individual twice
             val parent1 = selectParent(predecessors)
-            val parent2 = selectParent(predecessors)
+            var parent2: ScoredSolution
+            do {
+                parent2 = selectParent(predecessors)
+            } while (parent2 === parent1 && predecessors.size > 1)
 
-            // cross over, then mutate it
-            val mutatedSequence = mutate(crossover(parent1,parent2), mutationProbability)
+            // cross over
+            val crossoverSequence = crossover(parent1,parent2)
 
-            // calculate its score
+            // mutation
+            val mutatedSequence = mutate(crossoverSequence, mutationProbability)
+
+            // calculate its fitness score
             val mutatedScore = evaluateSequence(gameState, mutatedSequence)
 
             population.add(ScoredSolution(mutatedScore, mutatedSequence))
         }
-        // sort population
-        population.sortBy { it.score }
-        val best = predecessors.maxByOrNull { it.score }!!
+
+        // Store new generation for the next turn
+        predecessors = population
+
+        // select the best sequence in the population and get its first action
+        val best = population.maxByOrNull { it.score }!!
         val wrapper = GameStateWrapper(gameState, params, player)
         val action = wrapper.getAction(gameState, best.solution[0], best.solution[1])
         return action
     }
 
-    private fun crossover(parent1: RheaAgent.ScoredSolution, parent2: RheaAgent.ScoredSolution): FloatArray {
+    private fun crossover(parent1: ScoredSolution, parent2: ScoredSolution): FloatArray {
         return when (crossover) {
             is Crossover.N_Point -> n_pointCrossover(parent1,parent2)
             Crossover.Uniform -> uniformCrossover(parent1,parent2)
@@ -124,7 +138,7 @@ data class RheaAgent(
         }
     }
 
-    private fun uniformCrossover(parent1: RheaAgent.ScoredSolution, parent2: RheaAgent.ScoredSolution): FloatArray {
+    private fun uniformCrossover(parent1: ScoredSolution, parent2: ScoredSolution): FloatArray {
         val g1 = parent1.solution
         val g2 = parent2.solution
         require(g1.size == g2.size) { "Genome lengths differ" }
@@ -134,12 +148,12 @@ data class RheaAgent(
         }
     }
 
-    private fun n_pointCrossover(parent1: RheaAgent.ScoredSolution, parent2: RheaAgent.ScoredSolution): FloatArray {
+    private fun n_pointCrossover(parent1: ScoredSolution, parent2: ScoredSolution): FloatArray {
         val g1 = parent1.solution
         val g2 = parent2.solution
         val len = g1.size
 
-        var nPoints=(crossover.getParameter()*len).toInt()
+        val nPoints=(crossover.getParameter()*len).toInt()
 
         // unique, sorted cut positions in (0, len)
         val cuts = (1 until len).shuffled(random).take(nPoints).sorted()
@@ -165,7 +179,7 @@ data class RheaAgent(
         }
     }
 
-    private fun rankSelection(predecessors: MutableList<RheaAgent.ScoredSolution>): RheaAgent.ScoredSolution {
+    private fun rankSelection(predecessors: MutableList<ScoredSolution>): ScoredSolution {
         // calculate total rank
         val sortedPredecessors = predecessors.sortedByDescending { it.score }
         val totalRank=(1..predecessors.size).sum()
@@ -208,16 +222,15 @@ data class RheaAgent(
         return selected.maxBy { it.score }
     }
 
-    private fun mutate(parents: FloatArray, mutProb: Double): FloatArray {
-        val n = parents.size
+    private fun mutate(sequence: FloatArray, mutProb: Double): FloatArray {
+        val n = sequence.size
         val mutated = FloatArray(n)
-        // possibly crossover parents
-        // mutate resulting sequences
+
         for (i in 0 until n) {
             if (random.nextDouble() < mutProb) {
                 mutated[i] = random.nextFloat()
             } else {
-                mutated[i] = parents[i]
+                mutated[i] = sequence[i]
             }
         }
         return mutated
@@ -240,11 +253,11 @@ data class RheaAgent(
     }
 
     override fun getAgentType(): String {
-        return "RheaAgent-$sequenceLength-$populationSize-$mutationProbability-(${evaluationOpponentAgent.getAgentType()})-$parentSelectionStrategy-$crossover"
+        return "RheaAgent-$sequenceLength-$populationSize-$numberElites-$mutationProbability-(${evaluationOpponentAgent.getAgentType()})-$parentSelectionStrategy-$crossover"
     }
 
-    // random sequence of length n
     private fun randomSequence(length: Int): FloatArray {
+        // random sequence of length n
         val sequence = FloatArray(length)
         for (i in sequence.indices) {
             sequence[i] = random.nextFloat()
@@ -253,7 +266,7 @@ data class RheaAgent(
     }
 
     private fun evaluateSequence(state: GameState, sequence: FloatArray): Double {
-        evaluationOpponentAgent.prepareToPlayAs(player = player.opponent(), params = params);
+        evaluationOpponentAgent.prepareToPlayAs(player = player.opponent(), params = params)
         val wrapper = GameStateWrapper(state.deepCopy(), params, player, evaluationOpponentAgent)
         wrapper.runForwardModel(sequence)
         return wrapper.scoreDifference()
