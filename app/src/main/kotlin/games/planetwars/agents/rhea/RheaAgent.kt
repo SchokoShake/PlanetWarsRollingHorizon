@@ -100,13 +100,18 @@ data class RheaAgent(
 
         // mutate Predecessors until populationSize is reached
         for (i in population.size until populationSize) {
-
-            // choose 2 parents and make sure not to choose the same individual twice
+            // select first parent
             val parent1 = selectParent(predecessors)
-            var parent2: ScoredSolution
-            do {
-                parent2 = selectParent(predecessors)
-            } while (parent2 === parent1 && predecessors.size > 1)
+
+            // remove parent1 from the list to avoid selecting it again
+            val filtered = predecessors.filter { it !== parent1 }
+
+            // if only one individual exists, fallback to using parent1 again
+            val parent2 = if (filtered.isNotEmpty()) {
+                selectParent(filtered.toMutableList())
+            } else {
+                parent1
+            }
 
             // cross over
             val crossoverSequence = crossover(parent1,parent2)
@@ -200,22 +205,36 @@ data class RheaAgent(
     }
 
     private fun rouletteSelection(predecessors: MutableList<ScoredSolution>): ScoredSolution {
-            // calculate total fitness
-            val totalFitness=predecessors.sumOf { it.score }
-            // choose random value between 0 and total fitness
-            val luckyScore=(random.nextDouble()*totalFitness).toInt()
-            // select parent at chosen cumulative fitness score
-            var runningSum=0.0
-            for (solution in predecessors) {
-                runningSum += solution.score
-                if (runningSum >= luckyScore) {
-                    return solution // Selected parent
-                }
-            }
-            return predecessors.last()
+        // 1) Compute minimum raw score to ensure all shifted fitnesses are non-negative
+        val minScore = predecessors.minOf { it.score }
+        val offset = if (minScore < 0.0) -minScore else 0.0
+
+        // 2) Build a list of shifted (non-negative) fitness values
+        val shiftedFitnesses = predecessors.map { it.score + offset }
+
+        // 3) Compute totalFitness; if zero or negligible, fall back to uniform random
+        val totalFitness = shiftedFitnesses.sum()
+        if (totalFitness <= 0.0) {
+            return predecessors[random.nextInt(predecessors.size)]
         }
 
-        private fun tournamentSelection(predecessors: MutableList<ScoredSolution>): ScoredSolution {
+        // 4) Pick a random threshold in [0, totalFitness)
+        val luckyThreshold = random.nextDouble() * totalFitness
+
+        // 5) Traverse cumulatively until the threshold is reached
+        var runningSum = 0.0
+        for ((index, solution) in predecessors.withIndex()) {
+            runningSum += shiftedFitnesses[index]
+            if (runningSum >= luckyThreshold) {
+                return solution
+            }
+        }
+
+        // 6) Fallback in case of numerical issues
+        return predecessors.last()
+    }
+
+    private fun tournamentSelection(predecessors: MutableList<ScoredSolution>): ScoredSolution {
         //pick random t percent of the population
         val selected = predecessors.shuffled().take((parentSelectionStrategy.getParameter() * predecessors.size).toInt())
         //pick best
