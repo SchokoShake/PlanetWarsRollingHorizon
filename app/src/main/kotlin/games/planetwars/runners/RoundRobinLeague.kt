@@ -48,29 +48,20 @@ class SamplePlayerLists {
                 sequenceLength = 200,
                 populationSize = 30,
                 numberElites = 3,
-                mutationProbability = 0.8,
+                mutationProbability = 0.2,
                 evaluationOpponentAgent = DoNothingAgent(),
                 parentSelectionStrategy = ParentSelectionStrategy.Roulette,
                 crossover = Crossover.Uniform
             ),
-            RheaAgent(
-                sequenceLength = 200,
-                populationSize = 30,
-                numberElites = 3,
-                mutationProbability = 0.8,
-                evaluationOpponentAgent = DoNothingAgent(),
-                parentSelectionStrategy = ParentSelectionStrategy.Rank,
-                crossover = Crossover.Uniform
-            ),
-            RheaAgent(
-                sequenceLength = 200,
-                populationSize = 30,
-                numberElites = 3,
-                mutationProbability = 0.8,
-                evaluationOpponentAgent = DoNothingAgent(),
-                parentSelectionStrategy = ParentSelectionStrategy.Tournament(t=0.3),
-                crossover = Crossover.Uniform
-            ),
+                RheaAgent(
+                        sequenceLength = 30,
+                        populationSize = 200,
+                        numberElites = 3,
+                        mutationProbability = 0.2,
+                        evaluationOpponentAgent = DoNothingAgent(),
+                        parentSelectionStrategy = ParentSelectionStrategy.Roulette,
+                        crossover = Crossover.Uniform
+                ),
         )
     }
 }
@@ -103,7 +94,9 @@ data class RoundRobinLeague(
 
                 val agent1 = agents[i]
                 val agent2 = agents[j]
-                val result = runPair(agent1, agent2)
+
+                val gameRunner = GameRunner(agent1, agent2, gameParams)
+                val result = gameRunner.runGames(gamesPerPair)
 
                 val leagueEntry1 = scores[agent1.getAgentType()]!!
                 val leagueEntry2 = scores[agent2.getAgentType()]!!
@@ -111,6 +104,12 @@ data class RoundRobinLeague(
                 leagueEntry2.points += result[Player.Player2]!!
                 leagueEntry1.nGames += gamesPerPair
                 leagueEntry2.nGames += gamesPerPair
+
+                leagueEntry1.totalTimeAcrossAllGames += gameRunner.agent1TotalTime
+                leagueEntry1.totalMovesAcrossAllGames += gameRunner.totalMoves
+
+                leagueEntry2.totalTimeAcrossAllGames += gameRunner.agent2TotalTime
+                leagueEntry2.totalMovesAcrossAllGames += gameRunner.totalMoves
 
                 gameCounter++
                 val elapsed = System.currentTimeMillis() - tStart

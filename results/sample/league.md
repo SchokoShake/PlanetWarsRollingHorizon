@@ -1,6 +1,4 @@
-| Rank | Agent Name | Win Rate % | Played |
-|------|------------|----------|--------|
-| 1 | RheaAgentMultipleParents-200-15-5-0.8 | 61,7 | 60 |
-| 2 | RheaAgent-200-15-0.8-(DNA)-Roulette-U | 50,0 | 60 |
-| 3 | RheaAgent-200-15-0.8-(DNA)-Roulette-No | 50,0 | 60 |
-| 4 | RheaAgent-200-15-0.8-(DNA)-Roulette-N(0.7) | 38,3 | 60 |
+| Rank | Agent Name                              | Win Rate % | Played | Time/Turn (ms) |
+|------|-----------------------------------------|------------|--------|----------------|
+| 1    | RheaAgent-200-30-3-0.2-(DNA)-Roulette-U | 100,0      | 10     | 1,59           |
+| 2    | RheaAgent-30-200-3-0.2-(DNA)-Roulette-U | 0,0        | 10     | 2,93           |
