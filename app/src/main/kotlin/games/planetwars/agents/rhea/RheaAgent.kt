@@ -10,12 +10,14 @@ import kotlin.random.Random
 
 sealed class Crossover {
     abstract fun getParameter(): Double
+
     data object Uniform : Crossover() {
         override fun toString(): String {
             return "U"
         }
         override fun getParameter() = 1.0
     }
+
     data object None : Crossover() {
         override fun toString(): String {
             return "No"
@@ -29,7 +31,6 @@ sealed class Crossover {
             return "N($t)"
         }
     }
-
 }
 
 sealed class ParentSelectionStrategy {
@@ -54,7 +55,6 @@ sealed class ParentSelectionStrategy {
         override fun getParameter() = 1.0
     }
 }
-
 
 data class RheaAgent(
         var sequenceLength: Int = 200,
@@ -100,18 +100,9 @@ data class RheaAgent(
 
         // mutate Predecessors until populationSize is reached
         for (i in population.size until populationSize) {
-            // select first parent
+            // select parents
             val parent1 = selectParent(predecessors)
-
-            // remove parent1 from the list to avoid selecting it again
-            val filtered = predecessors.filter { it !== parent1 }
-
-            // if only one individual exists, fallback to using parent1 again
-            val parent2 = if (filtered.isNotEmpty()) {
-                selectParent(filtered.toMutableList())
-            } else {
-                parent1
-            }
+            val parent2 = selectParent(predecessors)
 
             // cross over
             val crossoverSequence = crossover(parent1,parent2)
@@ -128,7 +119,7 @@ data class RheaAgent(
         // Store new generation for the next turn
         predecessors = population
 
-        // select the best sequence in the population and get its first action
+        // select the best sequence in the population and return its first action
         val best = population.maxByOrNull { it.score }!!
         val wrapper = GameStateWrapper(gameState, params, player)
         val action = wrapper.getAction(gameState, best.solution[0], best.solution[1])
