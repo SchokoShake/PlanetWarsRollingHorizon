@@ -4,7 +4,6 @@ import games.planetwars.agents.Action
 import games.planetwars.agents.DoNothingAgent
 import games.planetwars.agents.PlanetWarsAgent
 import games.planetwars.agents.PlanetWarsPlayer
-import games.planetwars.agents.evo.GameStateWrapper
 import games.planetwars.core.*
 import kotlin.random.Random
 
@@ -15,6 +14,7 @@ data class RheaAgentMultipleParents(
         var mutationProbability: Double = 0.5,
         var evaluationOpponentAgent: PlanetWarsAgent = DoNothingAgent(),
         ): PlanetWarsPlayer() {
+
     data class ScoredSolution(val score: Double, val solution: FloatArray)
 
     private var predecessors: MutableList<ScoredSolution> = mutableListOf()

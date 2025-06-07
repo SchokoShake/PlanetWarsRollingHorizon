@@ -4,8 +4,6 @@ import games.planetwars.agents.Action
 import games.planetwars.agents.DoNothingAgent
 import games.planetwars.agents.PlanetWarsAgent
 import games.planetwars.agents.PlanetWarsPlayer
-import games.planetwars.agents.evo.GameStateWrapper
-import games.planetwars.agents.evo.SimpleEvoAgent
 import games.planetwars.core.*
 import kotlin.random.Random
 
@@ -28,13 +26,12 @@ data class GameStateWrapper(
         if (myPlanets.isEmpty()) {
             return Action.doNothing()
         }
-        // now find a random target planet
-        val otherPlanets = gameState.planets.filter { it.owner == player.opponent() || it.owner == Player.Neutral }
-        if (otherPlanets.isEmpty()) {
-            return Action.doNothing()
-        }
+
+        // choose any planet, not only opponent planets as target.
+        // Else reinforcement is not possible
+
         val source = myPlanets[(from * myPlanets.size).toInt()]
-        val target = otherPlanets[(to * otherPlanets.size).toInt()]
+        val target = gameState.planets[(to * gameState.planets.size).toInt()]
         return Action(player, source.id, target.id, source.nShips / 2)
     }
 

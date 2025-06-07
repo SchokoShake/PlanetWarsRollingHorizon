@@ -9,6 +9,8 @@ import games.planetwars.agents.random.PureRandomAgent
 import games.planetwars.agents.rhea.RheaAgent
 import games.planetwars.agents.rhea.RheaAgentMultipleParents
 import games.planetwars.agents.rhea.Crossover
+import games.planetwars.agents.rhea.FitnessFunction
+import games.planetwars.agents.rhea.InitializationMethod
 import games.planetwars.agents.rhea.ParentSelectionStrategy
 import games.planetwars.core.GameParams
 import games.planetwars.core.Player
@@ -51,16 +53,62 @@ class SamplePlayerLists {
                 mutationProbability = 0.2,
                 evaluationOpponentAgent = DoNothingAgent(),
                 parentSelectionStrategy = ParentSelectionStrategy.Roulette,
-                crossover = Crossover.Uniform
+                crossover = Crossover.Uniform,
+                    fitnessFunction = FitnessFunction.Ratio
             ),
                 RheaAgent(
-                        sequenceLength = 30,
-                        populationSize = 200,
+                        sequenceLength = 200,
+                        populationSize = 30,
                         numberElites = 3,
                         mutationProbability = 0.2,
                         evaluationOpponentAgent = DoNothingAgent(),
                         parentSelectionStrategy = ParentSelectionStrategy.Roulette,
-                        crossover = Crossover.Uniform
+                        crossover = Crossover.Uniform,
+                        fitnessFunction = FitnessFunction.Ships
+                ),
+                RheaAgent(
+                        sequenceLength = 200,
+                        populationSize = 30,
+                        numberElites = 3,
+                        mutationProbability = 0.2,
+                        evaluationOpponentAgent = DoNothingAgent(),
+                        parentSelectionStrategy = ParentSelectionStrategy.Roulette,
+                        crossover = Crossover.Uniform,
+                        initializationMethod=InitializationMethod.None,
+                        fitnessFunction = FitnessFunction.Ratio
+                ),
+                RheaAgent(
+                        sequenceLength = 200,
+                        populationSize = 30,
+                        numberElites = 3,
+                        mutationProbability = 0.2,
+                        evaluationOpponentAgent = DoNothingAgent(),
+                        parentSelectionStrategy = ParentSelectionStrategy.Roulette,
+                        crossover = Crossover.Uniform,
+                        initializationMethod=InitializationMethod.None,
+                        fitnessFunction = FitnessFunction.Ships
+                ),
+                RheaAgent(
+                        sequenceLength = 200,
+                        populationSize = 30,
+                        numberElites = 3,
+                        mutationProbability = 0.2,
+                        evaluationOpponentAgent = DoNothingAgent(),
+                        parentSelectionStrategy = ParentSelectionStrategy.Roulette,
+                        crossover = Crossover.Uniform,
+                        initializationMethod=InitializationMethod.None,
+                        fitnessFunction = FitnessFunction.Growth
+                ),
+                RheaAgent(
+                        sequenceLength = 200,
+                        populationSize = 30,
+                        numberElites = 3,
+                        mutationProbability = 0.2,
+                        evaluationOpponentAgent = DoNothingAgent(),
+                        parentSelectionStrategy = ParentSelectionStrategy.Roulette,
+                        crossover = Crossover.Uniform,
+                        initializationMethod=InitializationMethod.ISLA,
+                        fitnessFunction = FitnessFunction.Growth
                 ),
         )
     }

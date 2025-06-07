@@ -4,9 +4,59 @@ import games.planetwars.agents.Action
 import games.planetwars.agents.DoNothingAgent
 import games.planetwars.agents.PlanetWarsAgent
 import games.planetwars.agents.PlanetWarsPlayer
-import games.planetwars.agents.evo.GameStateWrapper
 import games.planetwars.core.*
+import java.lang.Math.ceil
 import kotlin.random.Random
+data class RheaGameStateWrapper(
+        val gameState: GameState,
+        val params: GameParams,
+        val player: Player,
+        val opponentModel: PlanetWarsAgent = DoNothingAgent(),
+) {
+    var forwardModel = ForwardModel(gameState, params)
+
+    companion object {
+        val shiftBy = 2
+    }
+
+    fun getAction(gameState: GameState, from: Float, to: Float): Action {
+        // filter the planets that are owned by the player AND have a transporter available
+        val myPlanets = gameState.planets.filter { it.owner == player && it.transporter == null }
+        // filter the planets that are owned by the player AND have a transporter available
+        if (myPlanets.isEmpty()) {
+            return Action.doNothing()
+        }
+
+        // choose any planet, not only opponent planets as target.
+        // Else reinforcement is not possible
+
+        val source = gameState.planets[(from * gameState.planets.size).toInt()]
+        val target = gameState.planets[(to * gameState.planets.size).toInt()]
+        return Action(player, source.id, target.id, source.nShips / 2)
+    }
+
+
+
+    fun runForwardModel(seq: FloatArray): Double {
+        var ix = 0;
+        forwardModel = ForwardModel(gameState.deepCopy(), params)
+        while (ix < seq.size && !forwardModel.isTerminal()) {
+            val from = seq[ix]
+            val to = seq[ix + 1]
+            val myAction = getAction(gameState, from, to)
+            val opponentAction = opponentModel.getAction(gameState)
+            val actions = mapOf(player to myAction, player.opponent() to opponentAction)
+            forwardModel.step(actions)
+            ix += shiftBy
+        }
+        return scoreDifference()
+    }
+
+    fun scoreDifference(): Double {
+        // allow standalone use of this as well
+        return forwardModel.getShips(player) - forwardModel.getShips(player.opponent())
+    }
+}
 
 sealed class Crossover {
     abstract fun getParameter(): Double
@@ -29,6 +79,38 @@ sealed class Crossover {
         override fun getParameter() = t
         override fun toString(): String {
             return "N($t)"
+        }
+    }
+}
+
+sealed class InitializationMethod {
+    data object ISLA : InitializationMethod() {
+        override fun toString(): String {
+            return "1SLA"
+        }
+    }
+    data object None : InitializationMethod() {
+        override fun toString(): String {
+            return "X"
+        }
+    }
+}
+
+sealed class FitnessFunction {
+    data object Ratio : FitnessFunction() {
+        override fun toString(): String {
+            return "R"
+        }
+    }
+    data object Ships : FitnessFunction() {
+        override fun toString(): String {
+            return "S"
+        }
+    }
+
+    data object Growth : FitnessFunction() {
+        override fun toString(): String {
+            return "G"
         }
     }
 }
@@ -63,8 +145,11 @@ data class RheaAgent(
         var mutationProbability: Double = 0.5,
         var evaluationOpponentAgent: PlanetWarsAgent = DoNothingAgent(),
         var parentSelectionStrategy: ParentSelectionStrategy = ParentSelectionStrategy.Random,
-        var crossover: Crossover = Crossover.None
+        var crossover: Crossover = Crossover.None,
+        var initializationMethod: InitializationMethod=InitializationMethod.ISLA,
+        var fitnessFunction: FitnessFunction=FitnessFunction.Ratio,
 ) : PlanetWarsPlayer() {
+
     data class ScoredSolution(val score: Double, val solution: FloatArray)
 
     private var predecessors: MutableList<ScoredSolution> = mutableListOf()
@@ -76,17 +161,13 @@ data class RheaAgent(
         // shift predecessors so they reflect current turn
         // if no predecessor exists create one
         if (predecessors.isEmpty()) {
-            for (i in 0 until populationSize) {
-                val solution = randomSequence(sequenceLength)
-                val score = evaluateSequence(gameState, solution)
-                predecessors.add(ScoredSolution(score, solution))
-            }
+            predecessors=initializePopulation(gameState)
         } else {
             // first shift, then fill missing values with random ones
             predecessors = predecessors.map {
                 val shifted = fillShiftedSequenceWithRandomValues(
-                        shiftLeft(it.solution, GameStateWrapper.shiftBy),
-                        GameStateWrapper.shiftBy
+                        shiftLeft(it.solution, RheaGameStateWrapper.shiftBy),
+                        RheaGameStateWrapper.shiftBy
                 )
                 ScoredSolution(evaluateSequence(gameState, shifted), shifted)
             }.toMutableList()
@@ -121,15 +202,125 @@ data class RheaAgent(
 
         // select the best sequence in the population and return its first action
         val best = population.maxByOrNull { it.score }!!
-        val wrapper = GameStateWrapper(gameState, params, player)
+        val wrapper = RheaGameStateWrapper(gameState, params, player)
         val action = wrapper.getAction(gameState, best.solution[0], best.solution[1])
         return action
     }
 
+    private fun initializePopulation(gameState: GameState): MutableList<ScoredSolution> {
+        var initialPopulation=mutableListOf<ScoredSolution>();
+        if(initializationMethod is InitializationMethod.ISLA){
+            initialPopulation=isla(gameState);
+         }else{
+             for (i in 0 until populationSize) {
+                 val solution = randomSequence(sequenceLength)
+                 val score = evaluateSequence(gameState, solution)
+                 initialPopulation.add(ScoredSolution(score, solution))
+             }
+         }
+        return initialPopulation;
+    }
+
+    private fun isla(gameState: GameState): MutableList<ScoredSolution> {
+
+
+        val population = mutableListOf<ScoredSolution>()
+
+        // Generate solution
+        val solution = generateSolution(gameState)
+        val scoredSolution = ScoredSolution(evaluateSequence(gameState, solution), solution)
+        population.add(scoredSolution)
+
+        for (i in 1 until populationSize) {
+            val mutatedSolution = mutate(scoredSolution.solution, mutationProbability)
+            val mutatedScore = evaluateSequence(gameState, mutatedSolution)
+            population.add(ScoredSolution(mutatedScore, mutatedSolution))
+        }
+
+        return population
+    }
+
+    private fun generateSolution(gameState: GameState): FloatArray {
+        val sequence = FloatArray(sequenceLength )
+        var currentModel = ForwardModel(gameState.deepCopy(), params)
+        val wrapper = RheaGameStateWrapper(gameState, params, player)
+
+        for (i in 0 until sequenceLength/2) {
+            // fill randomly if already at endstate
+            if (currentModel.isTerminal()) {
+                for (j in i until sequenceLength/2) {
+                    sequence[j * 2] = random.nextFloat()
+                    sequence[j * 2 + 1] = random.nextFloat()
+                }
+                break
+            }
+
+            var bestFromFloat = 0.0f
+            var bestToFloat = 0.0f
+            var bestScore = -Double.MAX_VALUE
+            var bestNextModel: ForwardModel? = null
+
+            //only select player planets with ships
+            val possibleSources = currentModel.state.planets.filter { it.owner == player && it.transporter == null && it.nShips >= 1 }
+
+            //if there are no source planets take random nonplayer planet as source to simulate no-op
+            if (possibleSources.isEmpty()) {
+                val nonPlayerPlanets = currentModel.state.planets.filter { it.owner != player }
+                bestFromFloat = if (nonPlayerPlanets.isNotEmpty()) {
+                    currentModel.state.planets.indexOf(nonPlayerPlanets.random(random)).toFloat() / currentModel.state.planets.size
+                } else {
+                    random.nextFloat()
+                }
+                bestToFloat = random.nextFloat()
+                bestNextModel = ForwardModel(currentModel.state.deepCopy(), params).apply { this.step(emptyMap()) }
+
+            } else {
+                for (sourcePlanet in possibleSources) {
+                    for (destPlanet in currentModel.state.planets) {
+                        if (sourcePlanet.id == destPlanet.id) continue
+
+                        val testAction = Action(player,sourcePlanet.id, destPlanet.id, sourcePlanet.nShips)
+
+                        val testModel = ForwardModel(currentModel.state.deepCopy(), params)
+                        testModel.step(mapOf(player to testAction))
+
+                        val distance = sourcePlanet.position.distance(destPlanet.position)
+                        val travelTime = ceil(distance / params.transporterSpeed).toInt()
+
+                        for (tick in 0 until travelTime) {
+                            if (testModel.isTerminal()) break
+                            testModel.step(emptyMap())
+                        }
+
+                        val currentScore = evaluateState(testModel, player)
+
+                        if (currentScore > bestScore) {
+                            bestScore = currentScore
+                            val sourceIdx = currentModel.state.planets.indexOf(sourcePlanet)
+                            val destIdx = currentModel.state.planets.indexOf(destPlanet)
+                            bestFromFloat = sourceIdx.toFloat() / currentModel.state.planets.size
+                            bestToFloat = destIdx.toFloat() / currentModel.state.planets.size
+                            bestNextModel = testModel
+                        }
+                    }
+                }
+            }
+
+            // Add the best found gene pair to our elite sequence
+            sequence[i * 2] = bestFromFloat
+            sequence[i * 2 + 1] = bestToFloat
+
+            // Update the current model to the state after the best action was taken
+            currentModel = bestNextModel ?: currentModel // Fallback to old model if no improvement
+        }
+        return sequence
+    }
+
+
     private fun crossover(parent1: ScoredSolution, parent2: ScoredSolution): FloatArray {
         return when (crossover) {
             is Crossover.N_Point -> n_pointCrossover(parent1,parent2)
-            Crossover.Uniform -> uniformCrossover(parent1,parent2)
+            is Crossover.Uniform -> uniformCrossover(parent1,parent2)
             else -> parent1.solution
         }
     }
@@ -168,10 +359,10 @@ data class RheaAgent(
 
     private fun selectParent(predecessors: MutableList<ScoredSolution>): ScoredSolution {
         return when (parentSelectionStrategy) {
-            ParentSelectionStrategy.Random -> predecessors[random.nextInt(predecessors.size)]
+            is ParentSelectionStrategy.Random -> predecessors[random.nextInt(predecessors.size)]
             is ParentSelectionStrategy.Tournament -> tournamentSelection(predecessors)
-            ParentSelectionStrategy.Roulette -> rouletteSelection(predecessors)
-            ParentSelectionStrategy.Rank -> rankSelection(predecessors)
+            is ParentSelectionStrategy.Roulette -> rouletteSelection(predecessors)
+            is ParentSelectionStrategy.Rank -> rankSelection(predecessors)
         }
     }
 
@@ -263,7 +454,7 @@ data class RheaAgent(
     }
 
     override fun getAgentType(): String {
-        return "RheaAgent-$sequenceLength-$populationSize-$numberElites-$mutationProbability-(${evaluationOpponentAgent.getAgentType()})-$parentSelectionStrategy-$crossover"
+        return "RheaAgent-$sequenceLength-$populationSize-$numberElites-$mutationProbability-(${evaluationOpponentAgent.getAgentType()})-$parentSelectionStrategy-$crossover-$fitnessFunction-$initializationMethod"
     }
 
     private fun randomSequence(length: Int): FloatArray {
@@ -275,10 +466,44 @@ data class RheaAgent(
         return sequence
     }
 
+    private fun evaluateState(forwardModel: ForwardModel, player: Player): Double {
+        return when(fitnessFunction){
+            is FitnessFunction.Ratio -> fitnessRatio(forwardModel,player);
+            is FitnessFunction.Growth -> fitnessGrowthDiff(forwardModel,player);
+            is FitnessFunction.Ships -> forwardModel.getShips(player) - forwardModel.getShips(player.opponent())
+        }
+    }
+
+    private fun fitnessGrowthDiff(forwardModel: ForwardModel, player: Player): Double {
+        return forwardModel.state.planets.filter { it.owner==player }.sumOf { it.growthRate }-forwardModel.state.planets.filter { it.owner==player.opponent() }.sumOf { it.growthRate }
+    }
+
+    private fun fitnessRatio(forwardModel: ForwardModel, player: Player): Double {
+        if (forwardModel.isTerminal()) {
+            val winner = forwardModel.getLeader()
+            return when (winner) {
+                player -> 1.0
+                player.opponent() -> 0.0
+                else -> 0.5
+            }
+        }
+
+        val myShips = forwardModel.getShips(player)
+        val opponentShips =forwardModel.getShips(player.opponent())
+        val totalShips = myShips + opponentShips
+
+        return if (totalShips > 0) {
+            myShips / totalShips
+        } else {
+            0.5
+        }
+    }
+
     private fun evaluateSequence(state: GameState, sequence: FloatArray): Double {
         evaluationOpponentAgent.prepareToPlayAs(player = player.opponent(), params = params)
-        val wrapper = GameStateWrapper(state.deepCopy(), params, player, evaluationOpponentAgent)
+        val wrapper = RheaGameStateWrapper(state.deepCopy(), params, player, evaluationOpponentAgent)
         wrapper.runForwardModel(sequence)
-        return wrapper.scoreDifference()
+
+        return evaluateState(wrapper.forwardModel,player)
     }
 }
