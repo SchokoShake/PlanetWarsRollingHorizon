@@ -19,7 +19,7 @@ fun main() {
 //    val agents = SamplePlayerLists().getRandomTrio()
     val agents = SamplePlayerLists().getFullList()
 //    agents.add(DoNothingAgent())
-    val league = RoundRobinLeague(agents, gamesPerPair = 5)
+    val league = RoundRobinLeague(agents, gamesPerPair = 50)
     val results = league.runRoundRobin()
     // use the League utils to print the results
     val writer = LeagueWriter()
@@ -47,69 +47,30 @@ class SamplePlayerLists {
     fun getFullList(): MutableList<PlanetWarsAgent> {
         return mutableListOf(
             RheaAgent(
-                sequenceLength = 200,
-                populationSize = 30,
-                numberElites = 3,
-                mutationProbability = 0.2,
+                sequenceLength = 100,
+                populationSize = 50,
+                numberElites = 5,
+                mutationProbability = 0.8,
                 evaluationOpponentAgent = DoNothingAgent(),
                 parentSelectionStrategy = ParentSelectionStrategy.Roulette,
                 crossover = Crossover.Uniform,
-                    fitnessFunction = FitnessFunction.Ratio
+                initializationMethod =  InitializationMethod.None,
+                fitnessFunction = FitnessFunction.Ships,
+                useVariableShipCount =  false,
             ),
-                RheaAgent(
-                        sequenceLength = 200,
-                        populationSize = 30,
-                        numberElites = 3,
-                        mutationProbability = 0.2,
-                        evaluationOpponentAgent = DoNothingAgent(),
-                        parentSelectionStrategy = ParentSelectionStrategy.Roulette,
-                        crossover = Crossover.Uniform,
-                        fitnessFunction = FitnessFunction.Ships
-                ),
-                RheaAgent(
-                        sequenceLength = 200,
-                        populationSize = 30,
-                        numberElites = 3,
-                        mutationProbability = 0.2,
-                        evaluationOpponentAgent = DoNothingAgent(),
-                        parentSelectionStrategy = ParentSelectionStrategy.Roulette,
-                        crossover = Crossover.Uniform,
-                        initializationMethod=InitializationMethod.None,
-                        fitnessFunction = FitnessFunction.Ratio
-                ),
-                RheaAgent(
-                        sequenceLength = 200,
-                        populationSize = 30,
-                        numberElites = 3,
-                        mutationProbability = 0.2,
-                        evaluationOpponentAgent = DoNothingAgent(),
-                        parentSelectionStrategy = ParentSelectionStrategy.Roulette,
-                        crossover = Crossover.Uniform,
-                        initializationMethod=InitializationMethod.None,
-                        fitnessFunction = FitnessFunction.Ships
-                ),
-                RheaAgent(
-                        sequenceLength = 200,
-                        populationSize = 30,
-                        numberElites = 3,
-                        mutationProbability = 0.2,
-                        evaluationOpponentAgent = DoNothingAgent(),
-                        parentSelectionStrategy = ParentSelectionStrategy.Roulette,
-                        crossover = Crossover.Uniform,
-                        initializationMethod=InitializationMethod.None,
-                        fitnessFunction = FitnessFunction.Growth
-                ),
-                RheaAgent(
-                        sequenceLength = 200,
-                        populationSize = 30,
-                        numberElites = 3,
-                        mutationProbability = 0.2,
-                        evaluationOpponentAgent = DoNothingAgent(),
-                        parentSelectionStrategy = ParentSelectionStrategy.Roulette,
-                        crossover = Crossover.Uniform,
-                        initializationMethod=InitializationMethod.ISLA,
-                        fitnessFunction = FitnessFunction.Growth
-                ),
+            RheaAgent(
+                sequenceLength = 100,
+                populationSize = 50,
+                numberElites = 5,
+                mutationProbability = 0.8,
+                evaluationOpponentAgent = DoNothingAgent(),
+                parentSelectionStrategy = ParentSelectionStrategy.Roulette,
+                crossover = Crossover.Uniform,
+                initializationMethod =  InitializationMethod.None,
+                fitnessFunction = FitnessFunction.Ships,
+                useVariableShipCount =  true,
+            ),
+            BetterRandomAgent(),
         )
     }
 }

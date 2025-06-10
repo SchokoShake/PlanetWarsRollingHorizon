@@ -12,14 +12,17 @@ data class RheaGameStateWrapper(
         val params: GameParams,
         val player: Player,
         val opponentModel: PlanetWarsAgent = DoNothingAgent(),
+        val useVariableShipCount: Boolean = false
 ) {
     var forwardModel = ForwardModel(gameState, params)
 
     companion object {
-        val shiftBy = 2
+        fun shiftBy(useVariableShipCount: Boolean): Int {
+            return if (useVariableShipCount) 3 else 2
+        }
     }
 
-    fun getAction(gameState: GameState, from: Float, to: Float): Action {
+    fun getAction(gameState: GameState, from: Float, to: Float, frac: Float = 0.5f): Action {
         // filter the planets that are owned by the player AND have a transporter available
         val myPlanets = gameState.planets.filter { it.owner == player && it.transporter == null }
         // filter the planets that are owned by the player AND have a transporter available
@@ -32,22 +35,30 @@ data class RheaGameStateWrapper(
 
         val source = gameState.planets[(from * gameState.planets.size).toInt()]
         val target = gameState.planets[(to * gameState.planets.size).toInt()]
-        return Action(player, source.id, target.id, source.nShips / 2)
+
+        val shipsToSend: Double = if (useVariableShipCount) {
+            (source.nShips * frac).coerceAtLeast(1.0)
+        } else {
+            source.nShips / 2.0
+        }
+
+        return Action(player, source.id, target.id, shipsToSend)
     }
 
-
-
     fun runForwardModel(seq: FloatArray): Double {
-        var ix = 0;
+        val shift = shiftBy(useVariableShipCount)
+        var ix = 0
         forwardModel = ForwardModel(gameState.deepCopy(), params)
+
         while (ix < seq.size && !forwardModel.isTerminal()) {
             val from = seq[ix]
             val to = seq[ix + 1]
-            val myAction = getAction(gameState, from, to)
+            val frac = if (useVariableShipCount) seq[ix + 2] else 0.5f
+            val myAction = getAction(gameState, from, to, frac)
             val opponentAction = opponentModel.getAction(gameState)
             val actions = mapOf(player to myAction, player.opponent() to opponentAction)
             forwardModel.step(actions)
-            ix += shiftBy
+            ix += shift
         }
         return scoreDifference()
     }
@@ -57,6 +68,7 @@ data class RheaGameStateWrapper(
         return forwardModel.getShips(player) - forwardModel.getShips(player.opponent())
     }
 }
+
 
 sealed class Crossover {
     abstract fun getParameter(): Double
@@ -148,7 +160,13 @@ data class RheaAgent(
         var crossover: Crossover = Crossover.None,
         var initializationMethod: InitializationMethod=InitializationMethod.ISLA,
         var fitnessFunction: FitnessFunction=FitnessFunction.Ratio,
+        var useVariableShipCount: Boolean = false
 ) : PlanetWarsPlayer() {
+
+    init {
+        val shift = RheaGameStateWrapper.shiftBy(useVariableShipCount)
+        sequenceLength *= shift  // One-time expansion from actions to floats
+    }
 
     data class ScoredSolution(val score: Double, val solution: FloatArray)
 
@@ -158,6 +176,8 @@ data class RheaAgent(
 
     override fun getAction(gameState: GameState): Action {
 
+        val shift = RheaGameStateWrapper.shiftBy(useVariableShipCount)
+
         // shift predecessors so they reflect current turn
         // if no predecessor exists create one
         if (predecessors.isEmpty()) {
@@ -166,8 +186,8 @@ data class RheaAgent(
             // first shift, then fill missing values with random ones
             predecessors = predecessors.map {
                 val shifted = fillShiftedSequenceWithRandomValues(
-                        shiftLeft(it.solution, RheaGameStateWrapper.shiftBy),
-                        RheaGameStateWrapper.shiftBy
+                    shiftLeft(it.solution, shift),
+                    shift
                 )
                 ScoredSolution(evaluateSequence(gameState, shifted), shifted)
             }.toMutableList()
@@ -202,28 +222,26 @@ data class RheaAgent(
 
         // select the best sequence in the population and return its first action
         val best = population.maxByOrNull { it.score }!!
-        val wrapper = RheaGameStateWrapper(gameState, params, player)
+        val wrapper = RheaGameStateWrapper(gameState, params, player, useVariableShipCount = useVariableShipCount)
         val action = wrapper.getAction(gameState, best.solution[0], best.solution[1])
         return action
     }
 
     private fun initializePopulation(gameState: GameState): MutableList<ScoredSolution> {
-        var initialPopulation=mutableListOf<ScoredSolution>();
+        var initialPopulation=mutableListOf<ScoredSolution>()
         if(initializationMethod is InitializationMethod.ISLA){
-            initialPopulation=isla(gameState);
-         }else{
-             for (i in 0 until populationSize) {
-                 val solution = randomSequence(sequenceLength)
-                 val score = evaluateSequence(gameState, solution)
-                 initialPopulation.add(ScoredSolution(score, solution))
-             }
-         }
-        return initialPopulation;
+            initialPopulation=isla(gameState)
+        }else{
+            for (i in 0 until populationSize) {
+                val solution = randomSequence(sequenceLength)
+                val score = evaluateSequence(gameState, solution)
+                initialPopulation.add(ScoredSolution(score, solution))
+            }
+        }
+        return initialPopulation
     }
 
     private fun isla(gameState: GameState): MutableList<ScoredSolution> {
-
-
         val population = mutableListOf<ScoredSolution>()
 
         // Generate solution
@@ -241,22 +259,26 @@ data class RheaAgent(
     }
 
     private fun generateSolution(gameState: GameState): FloatArray {
-        val sequence = FloatArray(sequenceLength )
+        val shift = RheaGameStateWrapper.shiftBy(useVariableShipCount)
+        val sequence = FloatArray(sequenceLength)
         var currentModel = ForwardModel(gameState.deepCopy(), params)
-        val wrapper = RheaGameStateWrapper(gameState, params, player)
 
-        for (i in 0 until sequenceLength/2) {
+        for (i in 0 until sequenceLength / shift) {
             // fill randomly if already at endstate
             if (currentModel.isTerminal()) {
                 for (j in i until sequenceLength/2) {
-                    sequence[j * 2] = random.nextFloat()
-                    sequence[j * 2 + 1] = random.nextFloat()
+                    sequence[j * shift] = random.nextFloat()
+                    sequence[j * shift + 1] = random.nextFloat()
+                    if (useVariableShipCount) {
+                        sequence[j * shift + 2] = random.nextFloat().coerceIn(0.01f, 1.0f)
+                    }
                 }
                 break
             }
 
             var bestFromFloat = 0.0f
             var bestToFloat = 0.0f
+            var bestFracFloat = 1.0f
             var bestScore = -Double.MAX_VALUE
             var bestNextModel: ForwardModel? = null
 
@@ -275,40 +297,49 @@ data class RheaAgent(
                 bestNextModel = ForwardModel(currentModel.state.deepCopy(), params).apply { this.step(emptyMap()) }
 
             } else {
+                val shipFractions = if (useVariableShipCount) listOf(0.25f, 0.5f, 0.75f, 1.0f) else listOf(0.5f)
+
                 for (sourcePlanet in possibleSources) {
                     for (destPlanet in currentModel.state.planets) {
                         if (sourcePlanet.id == destPlanet.id) continue
 
-                        val testAction = Action(player,sourcePlanet.id, destPlanet.id, sourcePlanet.nShips)
+                        for (frac in shipFractions) {
+                            val shipsToSend = (sourcePlanet.nShips * frac).coerceAtLeast(1.0)
+                            val testAction = Action(player,sourcePlanet.id, destPlanet.id, shipsToSend)
 
-                        val testModel = ForwardModel(currentModel.state.deepCopy(), params)
-                        testModel.step(mapOf(player to testAction))
+                            val testModel = ForwardModel(currentModel.state.deepCopy(), params)
+                            testModel.step(mapOf(player to testAction))
 
-                        val distance = sourcePlanet.position.distance(destPlanet.position)
-                        val travelTime = ceil(distance / params.transporterSpeed).toInt()
+                            val distance = sourcePlanet.position.distance(destPlanet.position)
+                            val travelTime = ceil(distance / params.transporterSpeed).toInt()
 
-                        for (tick in 0 until travelTime) {
-                            if (testModel.isTerminal()) break
-                            testModel.step(emptyMap())
-                        }
+                            for (tick in 0 until travelTime) {
+                                if (testModel.isTerminal()) break
+                                testModel.step(emptyMap())
+                            }
 
-                        val currentScore = evaluateState(testModel, player)
+                            val currentScore = evaluateState(testModel, player)
 
-                        if (currentScore > bestScore) {
-                            bestScore = currentScore
-                            val sourceIdx = currentModel.state.planets.indexOf(sourcePlanet)
-                            val destIdx = currentModel.state.planets.indexOf(destPlanet)
-                            bestFromFloat = sourceIdx.toFloat() / currentModel.state.planets.size
-                            bestToFloat = destIdx.toFloat() / currentModel.state.planets.size
-                            bestNextModel = testModel
+                            if (currentScore > bestScore) {
+                                bestScore = currentScore
+                                val sourceIdx = currentModel.state.planets.indexOf(sourcePlanet)
+                                val destIdx = currentModel.state.planets.indexOf(destPlanet)
+                                bestFromFloat = sourceIdx.toFloat() / currentModel.state.planets.size
+                                bestToFloat = destIdx.toFloat() / currentModel.state.planets.size
+                                bestFracFloat = frac
+                                bestNextModel = testModel
+                            }
                         }
                     }
                 }
             }
 
             // Add the best found gene pair to our elite sequence
-            sequence[i * 2] = bestFromFloat
-            sequence[i * 2 + 1] = bestToFloat
+            sequence[i * shift] = bestFromFloat
+            sequence[i * shift + 1] = bestToFloat
+            if (useVariableShipCount) {
+                sequence[i * shift + 2] = bestFracFloat
+            }
 
             // Update the current model to the state after the best action was taken
             currentModel = bestNextModel ?: currentModel // Fallback to old model if no improvement
@@ -454,7 +485,7 @@ data class RheaAgent(
     }
 
     override fun getAgentType(): String {
-        return "RheaAgent-$sequenceLength-$populationSize-$numberElites-$mutationProbability-(${evaluationOpponentAgent.getAgentType()})-$parentSelectionStrategy-$crossover-$fitnessFunction-$initializationMethod"
+        return "RheaAgent-$sequenceLength-$populationSize-$numberElites-$mutationProbability-(${evaluationOpponentAgent.getAgentType()})-$parentSelectionStrategy-$crossover-$fitnessFunction-$initializationMethod-$useVariableShipCount"
     }
 
     private fun randomSequence(length: Int): FloatArray {
@@ -468,8 +499,8 @@ data class RheaAgent(
 
     private fun evaluateState(forwardModel: ForwardModel, player: Player): Double {
         return when(fitnessFunction){
-            is FitnessFunction.Ratio -> fitnessRatio(forwardModel,player);
-            is FitnessFunction.Growth -> fitnessGrowthDiff(forwardModel,player);
+            is FitnessFunction.Ratio -> fitnessRatio(forwardModel,player)
+            is FitnessFunction.Growth -> fitnessGrowthDiff(forwardModel,player)
             is FitnessFunction.Ships -> forwardModel.getShips(player) - forwardModel.getShips(player.opponent())
         }
     }
