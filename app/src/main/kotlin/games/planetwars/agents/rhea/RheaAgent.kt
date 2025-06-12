@@ -25,15 +25,15 @@ data class RheaGameStateWrapper(
     fun getAction(gameState: GameState, from: Float, to: Float, frac: Float = 0.5f): Action {
         // filter the planets that are owned by the player AND have a transporter available
         val myPlanets = gameState.planets.filter { it.owner == player && it.transporter == null }
-        // filter the planets that are owned by the player AND have a transporter available
+
         if (myPlanets.isEmpty()) {
             return Action.doNothing()
         }
 
         // choose any planet, not only opponent planets as target.
-        // Else reinforcement is not possible
+        // else reinforcement is not possible
 
-        val source = gameState.planets[(from * gameState.planets.size).toInt()]
+        val source = myPlanets[(from * myPlanets.size).toInt()]
         val target = gameState.planets[(to * gameState.planets.size).toInt()]
 
         val shipsToSend: Double = if (useVariableShipCount) {
@@ -165,7 +165,7 @@ data class RheaAgent(
 
     init {
         val shift = RheaGameStateWrapper.shiftBy(useVariableShipCount)
-        sequenceLength *= shift  // One-time expansion from actions to floats
+        sequenceLength *= shift
     }
 
     data class ScoredSolution(val score: Double, val solution: FloatArray)
@@ -199,14 +199,14 @@ data class RheaAgent(
             .take(minOf(numberElites, populationSize))
             .toMutableList()
 
-        // mutate Predecessors until populationSize is reached
+        // mutate predecessors until population size is reached
         for (i in population.size until populationSize) {
             // select parents
             val parent1 = selectParent(predecessors)
             val parent2 = selectParent(predecessors)
 
             // cross over
-            val crossoverSequence = crossover(parent1,parent2)
+            val crossoverSequence = crossover(parent1, parent2)
 
             // mutation
             val mutatedSequence = mutate(crossoverSequence, mutationProbability)
@@ -295,7 +295,6 @@ data class RheaAgent(
                 }
                 bestToFloat = random.nextFloat()
                 bestNextModel = ForwardModel(currentModel.state.deepCopy(), params).apply { this.step(emptyMap()) }
-
             } else {
                 val shipFractions = if (useVariableShipCount) listOf(0.25f, 0.5f, 0.75f, 1.0f) else listOf(0.5f)
 
