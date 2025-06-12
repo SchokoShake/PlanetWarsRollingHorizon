@@ -267,7 +267,7 @@ data class RheaAgent(
         for (i in 0 until sequenceLength / shift) {
             // fill randomly if already at endstate
             if (currentModel.isTerminal()) {
-                for (j in i until sequenceLength/2) {
+                for (j in i until sequenceLength / shift) {
                     sequence[j * shift] = random.nextFloat()
                     sequence[j * shift + 1] = random.nextFloat()
                     if (useVariableShipCount) {
@@ -532,7 +532,7 @@ data class RheaAgent(
 
     private fun evaluateSequence(state: GameState, sequence: FloatArray): Double {
         evaluationOpponentAgent.prepareToPlayAs(player = player.opponent(), params = params)
-        val wrapper = RheaGameStateWrapper(state.deepCopy(), params, player, evaluationOpponentAgent)
+        val wrapper = RheaGameStateWrapper(state.deepCopy(), params, player, evaluationOpponentAgent, useVariableShipCount = useVariableShipCount)
         wrapper.runForwardModel(sequence)
 
         return evaluateState(wrapper.forwardModel,player)
