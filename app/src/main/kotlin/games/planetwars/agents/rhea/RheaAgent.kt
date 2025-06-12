@@ -223,7 +223,8 @@ data class RheaAgent(
         // select the best sequence in the population and return its first action
         val best = population.maxByOrNull { it.score }!!
         val wrapper = RheaGameStateWrapper(gameState, params, player, useVariableShipCount = useVariableShipCount)
-        val action = wrapper.getAction(gameState, best.solution[0], best.solution[1])
+        val frac = if (useVariableShipCount) best.solution[2] else 0.5f
+        val action = wrapper.getAction(gameState, best.solution[0], best.solution[1], frac)
         return action
     }
 
