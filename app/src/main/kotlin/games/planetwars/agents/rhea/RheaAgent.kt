@@ -339,8 +339,13 @@ data class RheaAgent(
                         if (sourcePlanet.id == destPlanet.id) continue
 
                         for (frac in shipFractions) {
-                            val shipsToSend = (sourcePlanet.nShips * frac).coerceAtLeast(1.0)
-                            val testAction = Action(player,sourcePlanet.id, destPlanet.id, shipsToSend)
+                            val shipsToSend = (sourcePlanet.nShips * frac)
+
+                            val testAction = if (shipsToSend < 1) {
+                                Action.doNothing()
+                            } else {
+                                Action(player, sourcePlanet.id, destPlanet.id, shipsToSend)
+                            }
 
                             val testModel = ForwardModel(currentModel.state.deepCopy(), params)
                             testModel.step(mapOf(player to testAction))
