@@ -47,9 +47,13 @@ data class RheaGameStateWrapper(
         }
 
         val shipsToSend: Double = if (useVariableShipCount) {
-            (source.nShips * frac).coerceAtLeast(1.0)
+            (source.nShips * frac)
         } else {
             source.nShips / 2.0
+        }
+
+        if (shipsToSend < 1) {
+            return Action.doNothing()
         }
 
         return Action(player, source.id, target.id, shipsToSend)
