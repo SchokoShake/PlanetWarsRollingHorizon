@@ -6,6 +6,7 @@ import games.planetwars.agents.PlanetWarsAgent
 import games.planetwars.agents.PlanetWarsPlayer
 import games.planetwars.core.*
 import java.lang.Math.ceil
+import kotlin.math.exp
 import kotlin.random.Random
 data class RheaGameStateWrapper(
         val gameState: GameState,
@@ -20,11 +21,15 @@ data class RheaGameStateWrapper(
         fun shiftBy(useVariableShipCount: Boolean): Int {
             return if (useVariableShipCount) 3 else 2
         }
+
+        fun getPlayerSourcePlanets(forwardModel:ForwardModel,player:Player):List<Planet>{
+            return forwardModel.state.planets.filter { it.owner == player && it.transporter == null };
+        }
     }
 
     fun getAction(gameState: GameState, from: Float, to: Float, frac: Float = 0.5f): Action {
         // filter the planets that are owned by the player AND have a transporter available
-        val myPlanets = gameState.planets.filter { it.owner == player && it.transporter == null }
+        val myPlanets = getPlayerSourcePlanets(forwardModel,player)
 
         if (myPlanets.isEmpty()) {
             return Action.doNothing()
@@ -32,9 +37,14 @@ data class RheaGameStateWrapper(
 
         // choose any planet, not only opponent planets as target.
         // else reinforcement is not possible
-
-        val source = myPlanets[(from * myPlanets.size).toInt()]
-        val target = gameState.planets[(to * gameState.planets.size).toInt()]
+        var source=myPlanets.first();
+        var target=myPlanets.first();
+        try{
+            source = myPlanets[(from * myPlanets.size).toInt()]
+            target = gameState.planets[(to * gameState.planets.size).toInt()]
+        }catch (e:Exception){
+            return Action.doNothing()
+        }
 
         val shipsToSend: Double = if (useVariableShipCount) {
             (source.nShips * frac).coerceAtLeast(1.0)
@@ -91,6 +101,28 @@ sealed class Crossover {
         override fun getParameter() = t
         override fun toString(): String {
             return "N($t)"
+        }
+    }
+}
+
+sealed class Mutation {
+
+    class Uniform(val probability:Double) : Mutation() {
+        override fun toString(): String {
+            return "U($probability)"
+        }
+    }
+
+    data object Softmax : Mutation() {
+        override fun toString(): String {
+            return "SM"
+        }
+    }
+
+    class n_bit(val n: Int) :  Mutation() {
+        fun getParameter() = n
+        override fun toString(): String {
+            return "N($n)"
         }
     }
 }
@@ -154,7 +186,7 @@ data class RheaAgent(
         var sequenceLength: Int = 200,
         var populationSize: Int = 20,
         var numberElites: Int = 5,
-        var mutationProbability: Double = 0.5,
+        final var mutation:Mutation =Mutation.Uniform(0.5),
         var evaluationOpponentAgent: PlanetWarsAgent = DoNothingAgent(),
         var parentSelectionStrategy: ParentSelectionStrategy = ParentSelectionStrategy.Random,
         var crossover: Crossover = Crossover.None,
@@ -209,7 +241,7 @@ data class RheaAgent(
             val crossoverSequence = crossover(parent1, parent2)
 
             // mutation
-            val mutatedSequence = mutate(crossoverSequence, mutationProbability)
+            val mutatedSequence = mutate(crossoverSequence)
 
             // calculate its fitness score
             val mutatedScore = evaluateSequence(gameState, mutatedSequence)
@@ -251,7 +283,7 @@ data class RheaAgent(
         population.add(scoredSolution)
 
         for (i in 1 until populationSize) {
-            val mutatedSolution = mutate(scoredSolution.solution, mutationProbability)
+            val mutatedSolution = mutate(scoredSolution.solution)
             val mutatedScore = evaluateSequence(gameState, mutatedSolution)
             population.add(ScoredSolution(mutatedScore, mutatedSolution))
         }
@@ -284,18 +316,17 @@ data class RheaAgent(
             var bestNextModel: ForwardModel? = null
 
             //only select player planets with ships
-            val possibleSources = currentModel.state.planets.filter { it.owner == player && it.transporter == null && it.nShips >= 1 }
+            val possibleSources = RheaGameStateWrapper.getPlayerSourcePlanets(currentModel,player)
 
-            //if there are no source planets take random nonplayer planet as source to simulate no-op
             if (possibleSources.isEmpty()) {
-                val nonPlayerPlanets = currentModel.state.planets.filter { it.owner != player }
-                bestFromFloat = if (nonPlayerPlanets.isNotEmpty()) {
-                    currentModel.state.planets.indexOf(nonPlayerPlanets.random(random)).toFloat() / currentModel.state.planets.size
-                } else {
-                    random.nextFloat()
+                for (j in i until sequenceLength / shift) {
+                    sequence[j * shift] = random.nextFloat()
+                    sequence[j * shift + 1] = random.nextFloat()
+                    if (useVariableShipCount) {
+                        sequence[j * shift + 2] = random.nextFloat().coerceIn(0.01f, 1.0f)
+                    }
                 }
-                bestToFloat = random.nextFloat()
-                bestNextModel = ForwardModel(currentModel.state.deepCopy(), params).apply { this.step(emptyMap()) }
+                break
             } else {
                 val shipFractions = if (useVariableShipCount) listOf(0.25f, 0.5f, 0.75f, 1.0f) else listOf(0.5f)
 
@@ -322,9 +353,9 @@ data class RheaAgent(
 
                             if (currentScore > bestScore) {
                                 bestScore = currentScore
-                                val sourceIdx = currentModel.state.planets.indexOf(sourcePlanet)
+                                val sourceIdx = RheaGameStateWrapper.getPlayerSourcePlanets(currentModel,player).indexOf(sourcePlanet)
                                 val destIdx = currentModel.state.planets.indexOf(destPlanet)
-                                bestFromFloat = sourceIdx.toFloat() / currentModel.state.planets.size
+                                bestFromFloat = sourceIdx.toFloat() / RheaGameStateWrapper.getPlayerSourcePlanets(currentModel,player).size
                                 bestToFloat = destIdx.toFloat() / currentModel.state.planets.size
                                 bestFracFloat = frac
                                 bestNextModel = testModel
@@ -454,12 +485,73 @@ data class RheaAgent(
         return selected.maxBy { it.score }
     }
 
-    private fun mutate(sequence: FloatArray, mutProb: Double): FloatArray {
+    private fun mutate(sequence: FloatArray): FloatArray {
+
+        return when(mutation){
+            is Mutation.Uniform-> {
+                 mutateUniform(sequence, mutation as Mutation.Uniform)
+            }
+            is Mutation.Softmax->mutateSoftmax(sequence,mutation as Mutation.Softmax)
+            is Mutation.n_bit->mutateNbit(sequence,mutation as Mutation.n_bit)
+        };
+
+
+    }
+
+    private fun mutateNbit(sequence: FloatArray, nBit: Mutation.n_bit): FloatArray {
+        val mutatedSequence = sequence.copyOf()
+        val numToMutate = minOf(nBit.n, sequence.size)
+        val indicesToMutate = sequence.indices.shuffled().take(numToMutate)
+
+        for (index in indicesToMutate) {
+            var newValue: Float
+            do {
+                newValue = Random.nextFloat()
+            } while (newValue == mutatedSequence[index])
+
+            mutatedSequence[index] = newValue
+        }
+
+        return mutatedSequence
+    }
+
+    private fun mutateSoftmax(sequence: FloatArray, softmax: Mutation.Softmax): FloatArray {
+        val mutatedSequence = sequence.copyOf()
+        val inputs = DoubleArray(mutatedSequence.size) { i -> 1.0 }
+
+        val exps = inputs.map { exp(it) }
+        val sumExps = exps.sum()
+
+        val probabilities = exps.map { it / sumExps }
+
+        val randomVal = Random.nextDouble()
+        var cumulativeProb = 0.0
+        var indexToMutate = mutatedSequence.size - 1
+
+        for (i in probabilities.indices) {
+            cumulativeProb += probabilities[i]
+            if (randomVal < cumulativeProb) {
+                indexToMutate = i
+                break
+            }
+        }
+
+        var newValue: Float
+        do {
+            newValue = Random.nextFloat()
+        } while (newValue == mutatedSequence[indexToMutate])
+
+        mutatedSequence[indexToMutate] = newValue
+
+        return mutatedSequence
+    }
+
+    private fun mutateUniform(sequence: FloatArray,uniformMutation:Mutation.Uniform): FloatArray {
         val n = sequence.size
         val mutated = FloatArray(n)
 
         for (i in 0 until n) {
-            if (random.nextDouble() < mutProb) {
+            if (random.nextDouble() < uniformMutation.probability) {
                 mutated[i] = random.nextFloat()
             } else {
                 mutated[i] = sequence[i]
@@ -485,7 +577,7 @@ data class RheaAgent(
     }
 
     override fun getAgentType(): String {
-        return "RheaAgent-$sequenceLength-$populationSize-$numberElites-$mutationProbability-(${evaluationOpponentAgent.getAgentType()})-$parentSelectionStrategy-$crossover-$fitnessFunction-$initializationMethod-$useVariableShipCount"
+        return "RheaAgent-$sequenceLength-$populationSize-$numberElites-$mutation-(${evaluationOpponentAgent.getAgentType()})-$parentSelectionStrategy-$crossover-$fitnessFunction-$initializationMethod-$useVariableShipCount"
     }
 
     private fun randomSequence(length: Int): FloatArray {

@@ -11,6 +11,7 @@ import games.planetwars.agents.rhea.RheaAgentMultipleParents
 import games.planetwars.agents.rhea.Crossover
 import games.planetwars.agents.rhea.FitnessFunction
 import games.planetwars.agents.rhea.InitializationMethod
+import games.planetwars.agents.rhea.Mutation
 import games.planetwars.agents.rhea.ParentSelectionStrategy
 import games.planetwars.core.GameParams
 import games.planetwars.core.Player
@@ -50,11 +51,11 @@ class SamplePlayerLists {
                 sequenceLength = 100,
                 populationSize = 50,
                 numberElites = 5,
-                mutationProbability = 0.8,
+                    mutation = Mutation.Uniform(0.8),
                 evaluationOpponentAgent = DoNothingAgent(),
                 parentSelectionStrategy = ParentSelectionStrategy.Roulette,
                 crossover = Crossover.Uniform,
-                initializationMethod =  InitializationMethod.None,
+                initializationMethod =  InitializationMethod.ISLA,
                 fitnessFunction = FitnessFunction.Ships,
                 useVariableShipCount =  false,
             ),
@@ -62,15 +63,14 @@ class SamplePlayerLists {
                 sequenceLength = 100,
                 populationSize = 50,
                 numberElites = 5,
-                mutationProbability = 0.8,
+                mutation = Mutation.Uniform(0.8),
                 evaluationOpponentAgent = DoNothingAgent(),
                 parentSelectionStrategy = ParentSelectionStrategy.Roulette,
                 crossover = Crossover.Uniform,
-                initializationMethod =  InitializationMethod.None,
+                initializationMethod =  InitializationMethod.ISLA,
                 fitnessFunction = FitnessFunction.Ships,
                 useVariableShipCount =  true,
             ),
-            BetterRandomAgent(),
         )
     }
 }
