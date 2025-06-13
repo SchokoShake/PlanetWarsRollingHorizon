@@ -1,6 +1,7 @@
 package games.planetwars.runners
 
 import games.planetwars.agents.DoNothingAgent
+import games.planetwars.agents.GreedyHeuristicAgent
 import games.planetwars.agents.PlanetWarsAgent
 import games.planetwars.agents.evo.SimpleEvoAgent
 import games.planetwars.agents.random.BetterRandomAgent
@@ -113,17 +114,7 @@ class CSamplePlayerLists {
                         fitnessFunction = FitnessFunction.Growth,
                         useVariableShipCount =  true,
                 ),
-                RheaAgent(
-                        sequenceLength = 100,
-                        populationSize = 50,
-                        numberElites = 5,
-                        mutation = Mutation.Softmax,
-                        evaluationOpponentAgent = DoNothingAgent(),
-                        parentSelectionStrategy = ParentSelectionStrategy.Roulette,
-                        crossover = Crossover.Uniform,
-                        initializationMethod =  InitializationMethod.ISLA,
-                        fitnessFunction = FitnessFunction.Growth,
-                        useVariableShipCount =  true,
+                GreedyHeuristicAgent(
                 ),
         )
     }

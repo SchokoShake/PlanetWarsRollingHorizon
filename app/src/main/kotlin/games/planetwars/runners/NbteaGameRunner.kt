@@ -4,6 +4,7 @@ import evodef.EvolutionLogger
 import evodef.SearchSpace
 import evodef.SolutionEvaluator
 import games.planetwars.agents.DoNothingAgent
+import games.planetwars.agents.GreedyHeuristicAgent
 import games.planetwars.agents.PlanetWarsAgent
 import games.planetwars.agents.PlanetWarsPlayer
 import games.planetwars.agents.random.BetterRandomAgent
@@ -16,6 +17,7 @@ import games.planetwars.agents.rhea.ParentSelectionStrategy
 import games.planetwars.agents.rhea.RheaAgent
 import games.planetwars.core.GameParams
 import games.planetwars.core.Player
+import kotlinx.coroutines.runBlocking
 import ntbea.NTupleBanditEA
 import ntbea.NTupleSystem
 import utilities.StatSummary
@@ -29,7 +31,7 @@ fun main() {
     // 2. Create our custom evaluator, which holds the search space
     val evaluator = RheaParameterEvaluator(
             searchSpace = searchSpace,
-            gamesToPlay = 10 // Play 10 games per evaluation for a stable score
+            gamesToPlay = 30 // Play 10 games per evaluation for a stable score
     )
 
     // 3. Create the NTupleBanditEA instance and configure it
@@ -70,8 +72,8 @@ data class RheaParameterSet(
 )
 
 data class RheaParameterOptions(
-        val sequenceLength: List<Int> = listOf(100, 200, 300),
-        val populationSize: List<Int> = listOf(10, 20, 30, 40),
+        val sequenceLength: List<Int> = listOf(50,100, 200, 300),
+        val populationSize: List<Int> = listOf(10, 40, 60),
         val elitePercentages: List<Double> = listOf(0.1, 0.4, 0.6),
         val mutations: List<Mutation> = listOf(
                 Mutation.Uniform(0.2),
@@ -83,7 +85,9 @@ data class RheaParameterOptions(
         ),
         val parentSelectionStrategies: List<ParentSelectionStrategy> = listOf(
                 ParentSelectionStrategy.Roulette,
+                ParentSelectionStrategy.Tournament(0.2),
                 ParentSelectionStrategy.Tournament(0.3),
+                ParentSelectionStrategy.Tournament(0.4),
                 ParentSelectionStrategy.Rank
         ),
         val crossovers: List<Crossover> = listOf(
@@ -120,19 +124,8 @@ class ParameterSearchSpace : SearchSpace {
 // The evaluator now correctly implements the full SolutionEvaluator interface
 class RheaParameterEvaluator(
         val searchSpace: SearchSpace,
-        val gamesToPlay: Int = 10,
-        val baselineOpponent: PlanetWarsPlayer = RheaAgent(
-                sequenceLength = 200,
-                populationSize = 20,
-                numberElites = 5,
-                mutation = Mutation.Uniform(0.8),
-                evaluationOpponentAgent = DoNothingAgent(),
-                parentSelectionStrategy = ParentSelectionStrategy.Roulette,
-                crossover = Crossover.Uniform,
-                initializationMethod =  InitializationMethod.None,
-                fitnessFunction = FitnessFunction.Ships,
-                useVariableShipCount =  true,
-        ),
+        val gamesToPlay: Int = 30,
+        val baselineOpponent: PlanetWarsPlayer = GreedyHeuristicAgent(),
 ) : SolutionEvaluator {
 
     private var evaluations: Int = 0
@@ -148,20 +141,22 @@ class RheaParameterEvaluator(
                 mutation = params.mutation,
                 parentSelectionStrategy = params.parentSelectionStrategy,
                 crossover = params.crossover,
-                sequenceLength = 10,
-                evaluationOpponentAgent = DoNothingAgent(),
-                initializationMethod = games.planetwars.agents.rhea.InitializationMethod.None,
-                fitnessFunction = games.planetwars.agents.rhea.FitnessFunction.Ratio,
-                useVariableShipCount = false
+                sequenceLength = params.sequenceLength,
+                evaluationOpponentAgent = params.evaluationOpponentAgent,
+                initializationMethod = params.initializationMethod,
+                fitnessFunction = params.fitnessFunction,
+                useVariableShipCount = params.useVariableShipCount,
         )
+        var winRate = 0.0
+        runBlocking {
+            val gameParams = GameParams(numPlanets = 20)
+            val gameRunner = GameRunner(agent1 = rheaAgent, agent2 = baselineOpponent, gameParams = gameParams)
+            val results = gameRunner.runGamesConcurrently(gamesToPlay)
 
-        val gameParams = GameParams(numPlanets = 20)
-        val gameRunner = GameRunner(agent1 = rheaAgent, agent2 = baselineOpponent, gameParams = gameParams)
-        val results = gameRunner.runGames(gamesToPlay)
+            winRate = results[Player.Player1]!!.toDouble() / gamesToPlay
+        }
 
-        val winRate = results[Player.Player1]!!.toDouble() / gamesToPlay
-        println("Eval #$evaluations -> Win Rate: $winRate")
-
+        println("Eval #$evaluations -> Win Rate: $winRate -> Agent: $rheaAgent")
         return winRate
     }
 

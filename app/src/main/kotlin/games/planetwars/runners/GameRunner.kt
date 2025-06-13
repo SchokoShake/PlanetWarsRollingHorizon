@@ -4,6 +4,10 @@ import games.planetwars.agents.PlanetWarsAgent
 import games.planetwars.agents.random.BetterRandomAgent
 import games.planetwars.agents.random.PureRandomAgent
 import games.planetwars.core.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.withContext
 
 data class GameRunner(
     val agent1: PlanetWarsAgent,
@@ -89,6 +93,24 @@ data class GameRunner(
 //        println(forwardModel.statusString())
 
         return scores
+    }
+    suspend fun runGamesConcurrently(nGames: Int): Map<Player, Int> = withContext(Dispatchers.Default) {
+        val scores = mutableMapOf(Player.Player1 to 0, Player.Player2 to 0, Player.Neutral to 0)
+
+        val jobs = (1..nGames).map {
+            async {
+                val runner = GameRunner(agent1, agent2, gameParams)
+                runner.runGame().getLeader()
+            }
+        }
+
+        val results = jobs.awaitAll()
+
+        for (winner in results) {
+            scores[winner] = scores.getOrDefault(winner, 0) + 1
+        }
+
+        scores
     }
 }
 
