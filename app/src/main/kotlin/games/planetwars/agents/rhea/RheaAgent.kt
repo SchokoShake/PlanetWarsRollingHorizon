@@ -141,20 +141,27 @@ sealed class InitializationMethod {
 
 sealed class FitnessFunction {
     data object Ratio : FitnessFunction() {
-        override fun toString(): String {
-            return "R"
-        }
+        override fun toString(): String = "R"
     }
+
     data object Ships : FitnessFunction() {
-        override fun toString(): String {
-            return "S"
-        }
+        override fun toString(): String = "S"
     }
 
     data object Growth : FitnessFunction() {
-        override fun toString(): String {
-            return "G"
-        }
+        override fun toString(): String = "G"
+    }
+
+    data object Aggressive : FitnessFunction() {
+        override fun toString(): String = "A"
+    }
+
+    data object Balanced : FitnessFunction() {
+        override fun toString(): String = "B"
+    }
+
+    data object Hybrid : FitnessFunction() {
+        override fun toString(): String = "H"
     }
 }
 
@@ -597,9 +604,12 @@ data class RheaAgent(
 
     private fun evaluateState(forwardModel: ForwardModel, player: Player): Double {
         return when(fitnessFunction){
-            is FitnessFunction.Ratio -> fitnessRatio(forwardModel,player)
-            is FitnessFunction.Growth -> fitnessGrowthDiff(forwardModel,player)
+            is FitnessFunction.Ratio -> fitnessRatio(forwardModel, player)
+            is FitnessFunction.Growth -> fitnessGrowthDiff(forwardModel, player)
             is FitnessFunction.Ships -> forwardModel.getShips(player) - forwardModel.getShips(player.opponent())
+            is FitnessFunction.Aggressive -> fitnessAggressive(forwardModel, player)
+            is FitnessFunction.Balanced -> fitnessBalanced(forwardModel, player)
+            is FitnessFunction.Hybrid -> fitnessHybrid(forwardModel, player)
         }
     }
 
@@ -626,6 +636,50 @@ data class RheaAgent(
         } else {
             0.5
         }
+    }
+
+    private fun fitnessAggressive(forwardModel: ForwardModel, player: Player): Double {
+        val myPlanets = forwardModel.state.planets.count { it.owner == player }
+        val enemyPlanets = forwardModel.state.planets.count { it.owner == player.opponent() }
+        val myShips = forwardModel.getShips(player)
+        val enemyShips = forwardModel.getShips(player.opponent())
+        val gameTick = forwardModel.state.gameTick
+
+        val planetWeight = 100.0
+        val shipWeight = 1.0
+        val eliminationBonus = 10000.0
+        val timePenaltyWeight = 1.0
+
+        val baseScore = (planetWeight * (myPlanets - enemyPlanets)) +
+                (shipWeight * (myShips - enemyShips)) -
+                (timePenaltyWeight * gameTick)
+
+        return if (enemyPlanets == 0) baseScore + eliminationBonus else baseScore
+    }
+
+    private fun fitnessBalanced(forwardModel: ForwardModel, player: Player): Double {
+        val myPlanets = forwardModel.state.planets.filter { it.owner == player }
+        val enemyPlanets = forwardModel.state.planets.filter { it.owner == player.opponent() }
+
+        val myGrowth = myPlanets.sumOf { it.growthRate }
+        val enemyGrowth = enemyPlanets.sumOf { it.growthRate }
+        val myShips = forwardModel.getShips(player)
+        val enemyShips = forwardModel.getShips(player.opponent())
+
+        val growthWeight = 200.0
+        val shipWeight = 1.0
+        val damageWeight = 0.5
+        val enemyDamage = enemyPlanets.sumOf { it.nShips }
+
+        return (growthWeight * (myGrowth - enemyGrowth)) +
+                (shipWeight * (myShips - enemyShips)) +
+                (damageWeight * enemyDamage)
+    }
+
+    private fun fitnessHybrid(forwardModel: ForwardModel, player: Player): Double {
+        val alpha = 0.5 // weight for aggressive
+        val beta = 0.5  // weight for balanced
+        return alpha * fitnessAggressive(forwardModel, player) + beta * fitnessBalanced(forwardModel, player)
     }
 
     private fun evaluateSequence(state: GameState, sequence: FloatArray): Double {
