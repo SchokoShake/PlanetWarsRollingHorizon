@@ -6,6 +6,7 @@ import games.planetwars.agents.random.CarefulRandomAgent
 import games.planetwars.agents.random.PureRandomAgent
 import games.planetwars.agents.rhea.RheaAgent
 import games.planetwars.agents.rhea.Crossover
+import games.planetwars.agents.rhea.Mutation
 import games.planetwars.agents.rhea.ParentSelectionStrategy
 import games.planetwars.core.GameParams
 import games.planetwars.runners.GameRunner
@@ -21,7 +22,7 @@ fun main() {
         sequenceLength = 200,
         populationSize = 30,
         numberElites = 3,
-        mutationProbability = 0.8,
+            mutation = Mutation.Uniform(0.8),
         evaluationOpponentAgent = DoNothingAgent(),
         parentSelectionStrategy = ParentSelectionStrategy.Roulette,
         crossover = Crossover.Uniform

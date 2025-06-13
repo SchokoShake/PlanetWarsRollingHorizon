@@ -15,6 +15,9 @@ plugins {
 
 repositories {
     mavenCentral()
+    flatDir {
+        dirs("libs")
+    }
 }
 
 group = "sml"
@@ -47,6 +50,8 @@ dependencies {
 
     // Additional Libraries
     implementation("com.google.guava:guava:32.1.2-jre")
+
+    implementation(files("libs/ntbea.jar"))
 }
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()

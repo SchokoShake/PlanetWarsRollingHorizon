@@ -5,8 +5,7 @@ import games.planetwars.agents.DoNothingAgent
 import games.planetwars.agents.PlanetWarsAgent
 import games.planetwars.agents.PlanetWarsPlayer
 import games.planetwars.core.*
-import java.lang.Math.ceil
-import kotlin.math.exp
+import kotlin.math.*
 import kotlin.random.Random
 data class RheaGameStateWrapper(
         val gameState: GameState,
@@ -85,26 +84,22 @@ data class RheaGameStateWrapper(
 
 
 sealed class Crossover {
-    abstract fun getParameter(): Double
 
     data object Uniform : Crossover() {
         override fun toString(): String {
             return "U"
         }
-        override fun getParameter() = 1.0
     }
 
     data object None : Crossover() {
         override fun toString(): String {
             return "No"
         }
-        override fun getParameter() = 1.0
     }
 
-    class N_Point(val t: Double) :  Crossover() {
-        override fun getParameter() = t
+    class N_Point(val n: Int) :  Crossover() {
         override fun toString(): String {
-            return "N($t)"
+            return "N($n)"
         }
     }
 }
@@ -190,7 +185,7 @@ data class RheaAgent(
         var sequenceLength: Int = 200,
         var populationSize: Int = 20,
         var numberElites: Int = 5,
-        final var mutation:Mutation =Mutation.Uniform(0.5),
+        var mutation:Mutation =Mutation.Uniform(0.5),
         var evaluationOpponentAgent: PlanetWarsAgent = DoNothingAgent(),
         var parentSelectionStrategy: ParentSelectionStrategy = ParentSelectionStrategy.Random,
         var crossover: Crossover = Crossover.None,
@@ -257,7 +252,8 @@ data class RheaAgent(
         predecessors = population
 
         // select the best sequence in the population and return its first action
-        val best = population.maxByOrNull { it.score }!!
+        val best = population.maxByOrNull  { it.score }
+                ?: return Action.doNothing()     // or other fallback
         val wrapper = RheaGameStateWrapper(gameState, params, player, useVariableShipCount = useVariableShipCount)
         val frac = if (useVariableShipCount) best.solution[2] else 0.5f
         val action = wrapper.getAction(gameState, best.solution[0], best.solution[1], frac)
@@ -406,7 +402,7 @@ data class RheaAgent(
         val g2 = parent2.solution
         val len = g1.size
 
-        val nPoints=(crossover.getParameter()*len).toInt()
+        val nPoints=((crossover as Crossover.N_Point).n*len)
 
         // unique, sorted cut positions in (0, len)
         val cuts = (1 until len).shuffled(random).take(nPoints).sorted()
@@ -454,7 +450,8 @@ data class RheaAgent(
 
     private fun rouletteSelection(predecessors: MutableList<ScoredSolution>): ScoredSolution {
         // 1) Compute minimum raw score to ensure all shifted fitnesses are non-negative
-        val minScore = predecessors.minOf { it.score }
+        val minScore = predecessors.minOfOrNull { it.score }
+                ?: error("Tournament selection failed")   // or other fallback
         val offset = if (minScore < 0.0) -minScore else 0.0
 
         // 2) Build a list of shifted (non-negative) fitness values
@@ -486,7 +483,7 @@ data class RheaAgent(
         //pick random t percent of the population
         val selected = predecessors.shuffled().take((parentSelectionStrategy.getParameter() * predecessors.size).toInt())
         //pick best
-        return selected.maxBy { it.score }
+        return selected.maxByOrNull { it.score }?: throw IllegalStateException("Tournament selection failed. The list of candidates was empty.")
     }
 
     private fun mutate(sequence: FloatArray): FloatArray {
