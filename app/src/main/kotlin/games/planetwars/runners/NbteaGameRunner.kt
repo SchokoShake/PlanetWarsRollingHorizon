@@ -20,7 +20,8 @@ import games.planetwars.core.Player
 import kotlinx.coroutines.runBlocking
 import ntbea.NTupleBanditEA
 import ntbea.NTupleSystem
-import utilities.StatSummary
+import ntbea.NTupleSystemReport
+
 
 fun main() {
     println("Starting RheaAgent Hyperparameter Optimization...")
@@ -31,24 +32,26 @@ fun main() {
     // 2. Create our custom evaluator, which holds the search space
     val evaluator = RheaParameterEvaluator(
             searchSpace = searchSpace,
-            gamesToPlay = 30 // Play 10 games per evaluation for a stable score
     )
 
     // 3. Create the NTupleBanditEA instance and configure it
-    val ntbea = NTupleBanditEA().setKExplore(1.0).setNeighbours(50)
+    val ntbea = NTupleBanditEA().setKExplore(1.0)
 
     // 4. Create the N-Tuple model and set it on the optimizer
     val model = NTupleSystem()
     ntbea.setModel(model)
 
     // 5. Run the optimization for a set number of evaluations
-    val evaluations = 500
+    val evaluations = 10000
     val bestSolution = ntbea.runTrial(evaluator, evaluations)
 
     // 6. Print the best result
     val bestParams = RheaParameterEvaluator.decodeSolution(bestSolution)
     // To get the score, we can look at the model's stats for that solution
     val bestScore = ntbea.getModel().getMeanEstimate(bestSolution)
+
+    NTupleSystemReport().setModel(model).printDetailedReport()
+    NTupleSystemReport().setModel(model).printSummaryReport()
 
     println("\n----- Optimization Finished -----")
     println("Total Evals: ${evaluator.nEvals()}")
@@ -72,45 +75,41 @@ data class RheaParameterSet(
 )
 
 data class RheaParameterOptions(
-        val sequenceLength: List<Int> = listOf(50,100, 200, 300),
-        val populationSize: List<Int> = listOf(10, 40, 60),
-        val elitePercentages: List<Double> = listOf(0.1, 0.4, 0.6),
+        val sequenceLength: List<Int> = listOf(200,250, 300),
+        val populationSize: List<Int> = listOf(80),
+        val elitePercentages: List<Double> = listOf(0.1,0.2,0.3),
         val mutations: List<Mutation> = listOf(
+                Mutation.Uniform(0.1),
                 Mutation.Uniform(0.2),
-                Mutation.Uniform(0.5),
-                Mutation.Uniform(0.8),
-                Mutation.Softmax,
-                Mutation.n_bit(1),
-                Mutation.n_bit(2)
+                Mutation.Uniform(0.3),
+                Mutation.n_bit(20),
+                Mutation.n_bit(50),
         ),
         val parentSelectionStrategies: List<ParentSelectionStrategy> = listOf(
-                ParentSelectionStrategy.Roulette,
+                ParentSelectionStrategy.Tournament(0.1),
                 ParentSelectionStrategy.Tournament(0.2),
                 ParentSelectionStrategy.Tournament(0.3),
-                ParentSelectionStrategy.Tournament(0.4),
-                ParentSelectionStrategy.Rank
         ),
         val crossovers: List<Crossover> = listOf(
                 Crossover.Uniform,
-                Crossover.None,
                 Crossover.N_Point(1),
                 Crossover.N_Point(2)
         ),
         val evaluationOpponentAgents: List<PlanetWarsAgent> = listOf(
                 DoNothingAgent(),
-                PureRandomAgent(),
-                BetterRandomAgent()
         ),
         val initializationMethods: List<InitializationMethod> = listOf(
                 InitializationMethod.None,
                 InitializationMethod.ISLA
         ),
         val fitnessFunctions: List<FitnessFunction> = listOf(
-                FitnessFunction.Growth,
                 FitnessFunction.Ratio,
-                FitnessFunction.Ships
+                FitnessFunction.Ships,
+                FitnessFunction.Aggressive,
+                FitnessFunction.Hybrid,
+                FitnessFunction.Balanced
         ),
-        val useVariableShipCounts: List<Boolean> = listOf(true, false)
+        val useVariableShipCounts: List<Boolean> = listOf(true)
 )
 
 
@@ -124,8 +123,18 @@ class ParameterSearchSpace : SearchSpace {
 // The evaluator now correctly implements the full SolutionEvaluator interface
 class RheaParameterEvaluator(
         val searchSpace: SearchSpace,
-        val gamesToPlay: Int = 30,
-        val baselineOpponent: PlanetWarsPlayer = GreedyHeuristicAgent(),
+        val baselineOpponent: PlanetWarsPlayer = RheaAgent(
+                populationSize = 60,
+                numberElites = 6,
+                mutation = Mutation.Uniform(0.5),
+                parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.2),
+                crossover = Crossover.N_Point(2),
+                sequenceLength = 200,
+                evaluationOpponentAgent = DoNothingAgent(),
+                initializationMethod = InitializationMethod.ISLA,
+                fitnessFunction = FitnessFunction.Ships,
+                useVariableShipCount = true,
+        ),
 ) : SolutionEvaluator {
 
     private var evaluations: Int = 0
@@ -147,17 +156,24 @@ class RheaParameterEvaluator(
                 fitnessFunction = params.fitnessFunction,
                 useVariableShipCount = params.useVariableShipCount,
         )
-        var winRate = 0.0
-        runBlocking {
             val gameParams = GameParams(numPlanets = 20)
             val gameRunner = GameRunner(agent1 = rheaAgent, agent2 = baselineOpponent, gameParams = gameParams)
-            val results = gameRunner.runGamesConcurrently(gamesToPlay)
+            val results = gameRunner.runGames(1)
 
-            winRate = results[Player.Player1]!!.toDouble() / gamesToPlay
+
+        val p1Wins = results[Player.Player1] ?: 0
+        val p2Wins = results[Player.Player2] ?: 0
+
+        // The evaluation function is +1 for a win, -1 for a loss, and 0 for a draw.
+        var fitness = when {
+            p1Wins > p2Wins -> 1.0
+            p2Wins > p1Wins -> -1.0
+            else -> 0.0
         }
 
-        println("Eval #$evaluations -> Win Rate: $winRate -> Agent: $rheaAgent")
-        return winRate
+
+        println("Eval #$evaluations -> Fitness: $fitness -> Agent: $rheaAgent")
+        return fitness
     }
 
     // --- Required methods from the SolutionEvaluator interface ---

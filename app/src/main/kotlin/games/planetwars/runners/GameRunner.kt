@@ -7,6 +7,8 @@ import games.planetwars.core.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
 data class GameRunner(
@@ -94,13 +96,18 @@ data class GameRunner(
 
         return scores
     }
-    suspend fun runGamesConcurrently(nGames: Int): Map<Player, Int> = withContext(Dispatchers.Default) {
+    suspend fun runGamesConcurrently(nGames: Int,concurrencyLimit:Int=20): Map<Player, Int> = withContext(Dispatchers.Default) {
+        val semaphore = Semaphore(concurrencyLimit)
+
         val scores = mutableMapOf(Player.Player1 to 0, Player.Player2 to 0, Player.Neutral to 0)
 
         val jobs = (1..nGames).map {
             async {
-                val runner = GameRunner(agent1, agent2, gameParams)
-                runner.runGame().getLeader()
+                // Each coroutine will suspend here until a permit is available.
+                semaphore.withPermit {
+                    val runner = GameRunner(agent1, agent2, gameParams)
+                    runner.runGame().getLeader()
+                }
             }
         }
 
@@ -111,7 +118,7 @@ data class GameRunner(
         }
 
         scores
-    }
+}
 }
 
 fun main() {
