@@ -668,12 +668,9 @@ data class RheaAgent(
 
         val growthWeight = 200.0
         val shipWeight = 1.0
-        val damageWeight = 0.5
-        val enemyDamage = enemyPlanets.sumOf { it.nShips }
 
         return (growthWeight * (myGrowth - enemyGrowth)) +
-                (shipWeight * (myShips - enemyShips)) +
-                (damageWeight * enemyDamage)
+                (shipWeight * (myShips - enemyShips))
     }
 
     private fun fitnessHybrid(forwardModel: ForwardModel, player: Player): Double {
