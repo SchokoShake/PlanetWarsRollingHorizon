@@ -42,7 +42,7 @@ fun main() {
     ntbea.setModel(model)
 
     // 5. Run the optimization for a set number of evaluations
-    val evaluations = 10000
+    val evaluations = 3000
     val bestSolution = ntbea.runTrial(evaluator, evaluations)
 
     // 6. Print the best result
