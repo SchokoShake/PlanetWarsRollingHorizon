@@ -621,7 +621,7 @@ data class RheaAgent(
         if (forwardModel.isTerminal()) {
             val winner = forwardModel.getLeader()
             return when (winner) {
-                player -> 1000.0
+                player -> 1.0
                 player.opponent() -> 0.0
                 else -> 0.5
             }
@@ -629,11 +629,12 @@ data class RheaAgent(
 
         val myShips = forwardModel.getShips(player)
         val opponentShips =forwardModel.getShips(player.opponent())
+        val totalShips = myShips + opponentShips
 
-        return if (opponentShips == 0.0) {
-            myShips / opponentShips
+        return if (totalShips > 0) {
+            myShips / totalShips
         } else {
-            1000.0
+            0.5
         }
     }
 
@@ -662,12 +663,14 @@ data class RheaAgent(
 
         val myGrowth = myPlanets.sumOf { it.growthRate }
         val enemyGrowth = enemyPlanets.sumOf { it.growthRate }
+        val myShips = forwardModel.getShips(player)
+        val enemyShips = forwardModel.getShips(player.opponent())
 
         val growthWeight = 200.0
         val shipWeight = 1.0
 
         return (growthWeight * (myGrowth - enemyGrowth)) +
-                (shipWeight * fitnessRatio(forwardModel,player))
+                (shipWeight * (myShips - enemyShips))
     }
 
     private fun fitnessHybrid(forwardModel: ForwardModel, player: Player): Double {
