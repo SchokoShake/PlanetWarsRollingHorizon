@@ -7,6 +7,7 @@ import games.planetwars.agents.DoNothingAgent
 import games.planetwars.agents.GreedyHeuristicAgent
 import games.planetwars.agents.PlanetWarsAgent
 import games.planetwars.agents.PlanetWarsPlayer
+import games.planetwars.agents.evo.SimpleEvoAgent
 import games.planetwars.agents.random.BetterRandomAgent
 import games.planetwars.agents.random.PureRandomAgent
 import games.planetwars.agents.rhea.Crossover
@@ -42,7 +43,7 @@ fun main() {
     ntbea.setModel(model)
 
     // 5. Run the optimization for a set number of evaluations
-    val evaluations = 600
+    val evaluations = 1000
     val bestSolution = ntbea.runTrial(evaluator, evaluations)
 
     // 6. Print the best result
@@ -75,12 +76,15 @@ data class RheaParameterSet(
 )
 
 data class RheaParameterOptions(
-        val sequenceLength: List<Int> = listOf(200),
+        val sequenceLength: List<Int> = listOf(200,250, 300),
         val populationSize: List<Int> = listOf(80),
-        val elitePercentages: List<Double> = listOf(0.1,0.2),
+        val elitePercentages: List<Double> = listOf(0.1,0.2,0.3),
         val mutations: List<Mutation> = listOf(
+                Mutation.Uniform(0.1),
                 Mutation.Uniform(0.2),
                 Mutation.Uniform(0.3),
+                Mutation.n_bit(20),
+                Mutation.n_bit(50),
         ),
         val parentSelectionStrategies: List<ParentSelectionStrategy> = listOf(
                 ParentSelectionStrategy.Tournament(0.1),
@@ -94,8 +98,6 @@ data class RheaParameterOptions(
         ),
         val evaluationOpponentAgents: List<PlanetWarsAgent> = listOf(
                 DoNothingAgent(),
-                GreedyHeuristicAgent(),
-                PureRandomAgent()
         ),
         val initializationMethods: List<InitializationMethod> = listOf(
                 InitializationMethod.None,
@@ -104,6 +106,7 @@ data class RheaParameterOptions(
         val fitnessFunctions: List<FitnessFunction> = listOf(
                 FitnessFunction.Ratio,
                 FitnessFunction.Ships,
+                FitnessFunction.Aggressive,
                 FitnessFunction.Hybrid,
                 FitnessFunction.Balanced
         ),
@@ -120,19 +123,30 @@ class ParameterSearchSpace : SearchSpace {
 
 // The evaluator now correctly implements the full SolutionEvaluator interface
 class RheaParameterEvaluator(
-        val searchSpace: SearchSpace,
-        val baselineOpponent: PlanetWarsPlayer = RheaAgent(
-                populationSize = 40,//60
-                numberElites = 6,
-                mutation = Mutation.Uniform(0.5),
-                parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.2),
-                crossover = Crossover.N_Point(2),
-                sequenceLength = 150, //200
-                evaluationOpponentAgent = DoNothingAgent(),
-                initializationMethod = InitializationMethod.ISLA(),
-                fitnessFunction = FitnessFunction.Ratio,//Ships
-                useVariableShipCount = true,
+    val searchSpace: SearchSpace,
+    val baselineOpponents: List<PlanetWarsPlayer> = listOf(
+        RheaAgent(
+            populationSize = 60,
+            numberElites = 6,
+            mutation = Mutation.Uniform(0.5),
+            parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.2),
+            crossover = Crossover.N_Point(2),
+            sequenceLength = 200,
+            evaluationOpponentAgent = DoNothingAgent(),
+            initializationMethod = InitializationMethod.ISLA,
+            fitnessFunction = FitnessFunction.Ships,
+            useVariableShipCount = true
         ),
+        GreedyHeuristicAgent(),
+        BetterRandomAgent(),
+        SimpleEvoAgent(
+            useShiftBuffer = true,
+            nEvals = 50,
+            sequenceLength = 400,
+            opponentModel = DoNothingAgent(),
+            probMutation = 0.8,
+        )
+    )
 ) : SolutionEvaluator {
 
     private var evaluations: Int = 0
@@ -143,32 +157,35 @@ class RheaParameterEvaluator(
 
         val params = decodeSolution(solution)
         val rheaAgent = RheaAgent(
-                populationSize = params.populationSize,
-                numberElites = params.numberElites,
-                mutation = params.mutation,
-                parentSelectionStrategy = params.parentSelectionStrategy,
-                crossover = params.crossover,
-                sequenceLength = params.sequenceLength,
-                evaluationOpponentAgent = params.evaluationOpponentAgent,
-                initializationMethod = params.initializationMethod,
-                fitnessFunction = params.fitnessFunction,
-                useVariableShipCount = params.useVariableShipCount,
+            populationSize = params.populationSize,
+            numberElites = params.numberElites,
+            mutation = params.mutation,
+            parentSelectionStrategy = params.parentSelectionStrategy,
+            crossover = params.crossover,
+            sequenceLength = params.sequenceLength,
+            evaluationOpponentAgent = params.evaluationOpponentAgent,
+            initializationMethod = params.initializationMethod,
+            fitnessFunction = params.fitnessFunction,
+            useVariableShipCount = params.useVariableShipCount
         )
+
+        // Run games in parallel against multiple opponents
+        val results = baselineOpponents.parallelStream().map { opponent ->
             val gameParams = GameParams(numPlanets = 20)
-            val gameRunner = GameRunner(agent1 = rheaAgent, agent2 = baselineOpponent, gameParams = gameParams)
-            val results = gameRunner.runGames(1)
+            val gameRunner = GameRunner(agent1 = rheaAgent, agent2 = opponent, gameParams = gameParams)
+            val matchResults = gameRunner.runGames(1)
+            val p1Wins = matchResults[Player.Player1] ?: 0
+            val p2Wins = matchResults[Player.Player2] ?: 0
 
+            when {
+                p1Wins > p2Wins -> 1.0
+                p2Wins > p1Wins -> -1.0
+                else -> 0.0
+            }
+        }.toList()
 
-        val p1Wins = results[Player.Player1] ?: 0
-        val p2Wins = results[Player.Player2] ?: 0
-
-        // The evaluation function is +1 for a win, -1 for a loss, and 0 for a draw.
-        var fitness = when {
-            p1Wins > p2Wins -> 1.0
-            p2Wins > p1Wins -> -1.0
-            else -> 0.0
-        }
-
+        // Average fitness across all opponents
+        val fitness = results.average()
 
         println("Eval #$evaluations -> Fitness: $fitness -> Agent: $rheaAgent")
         return fitness
