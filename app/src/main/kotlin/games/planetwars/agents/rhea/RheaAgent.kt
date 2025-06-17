@@ -127,9 +127,9 @@ sealed class Mutation {
 }
 
 sealed class InitializationMethod {
-    data object ISLA : InitializationMethod() {
+    class ISLA(val percent: Double=1.0) : InitializationMethod() {
         override fun toString(): String {
-            return "1SLA"
+            return "1SLA($percent)"
         }
     }
     data object None : InitializationMethod() {
@@ -196,7 +196,7 @@ data class RheaAgent(
         var evaluationOpponentAgent: PlanetWarsAgent = DoNothingAgent(),
         var parentSelectionStrategy: ParentSelectionStrategy = ParentSelectionStrategy.Random,
         var crossover: Crossover = Crossover.None,
-        var initializationMethod: InitializationMethod=InitializationMethod.ISLA,
+        var initializationMethod: InitializationMethod=InitializationMethod.ISLA(),
         var fitnessFunction: FitnessFunction=FitnessFunction.Ratio,
         var useVariableShipCount: Boolean = false
 ) : PlanetWarsPlayer() {
@@ -289,10 +289,18 @@ data class RheaAgent(
         val scoredSolution = ScoredSolution(evaluateSequence(gameState, solution), solution)
         population.add(scoredSolution)
 
-        for (i in 1 until populationSize) {
+        var percent=(initializationMethod as InitializationMethod.ISLA).percent.coerceIn(0.0,1.0);
+
+        while (population.size < (populationSize*percent).toInt()) {
             val mutatedSolution = mutate(scoredSolution.solution)
             val mutatedScore = evaluateSequence(gameState, mutatedSolution)
             population.add(ScoredSolution(mutatedScore, mutatedSolution))
+        }
+
+        while (population.size < populationSize) {
+            val solution = randomSequence(sequenceLength)
+            val score = evaluateSequence(gameState, solution)
+            population.add(ScoredSolution(score, solution))
         }
 
         return population
