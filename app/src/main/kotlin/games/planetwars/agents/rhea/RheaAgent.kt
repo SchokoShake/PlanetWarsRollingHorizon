@@ -163,6 +163,10 @@ sealed class FitnessFunction {
     data object Hybrid : FitnessFunction() {
         override fun toString(): String = "H"
     }
+
+    data object Strategic : FitnessFunction() {
+        override fun toString(): String = "ST"
+    }
 }
 
 sealed class ParentSelectionStrategy {
@@ -618,6 +622,7 @@ data class RheaAgent(
             is FitnessFunction.Aggressive -> fitnessAggressive(forwardModel, player)
             is FitnessFunction.Balanced -> fitnessBalanced(forwardModel, player)
             is FitnessFunction.Hybrid -> fitnessHybrid(forwardModel, player)
+            is FitnessFunction.Strategic -> fitnessStrategic(forwardModel, player)
         }
     }
 
@@ -685,6 +690,37 @@ data class RheaAgent(
         val alpha = 0.5 // weight for aggressive
         val beta = 0.5  // weight for balanced
         return alpha * fitnessAggressive(forwardModel, player) + beta * fitnessBalanced(forwardModel, player)
+    }
+
+    private fun fitnessStrategic(forwardModel: ForwardModel, player: Player): Double {
+        val gameTick = forwardModel.state.gameTick
+
+        return if (gameTick < 1000) { // assuming a game of 2000 ticks
+            val myPlanets = forwardModel.state.planets.filter { it.owner == player }
+            val enemyPlanets = forwardModel.state.planets.filter { it.owner == player.opponent() }
+
+            val myGrowth = myPlanets.sumOf { it.growthRate }
+            val enemyGrowth = enemyPlanets.sumOf { it.growthRate }
+
+            val planetWeight = 1.0
+            val growthWeight = 20.0
+
+            (planetWeight * (myPlanets.size - enemyPlanets.size)) +
+                    (growthWeight * (myGrowth - enemyGrowth))
+
+        } else {
+            val myShips = forwardModel.getShips(player)
+            val enemyShips = forwardModel.getShips(player.opponent())
+
+            val shipWeight = 1.0
+            val eliminationBonus = 10000.0
+            val timePenaltyWeight = 0.5
+
+            val baseScore = (shipWeight * (myShips - enemyShips)) - (timePenaltyWeight * gameTick)
+            val enemyPlanetsRemaining = forwardModel.state.planets.any { it.owner == player.opponent() }
+
+            if (!enemyPlanetsRemaining) baseScore + eliminationBonus else baseScore
+        }
     }
 
     private fun evaluateSequence(state: GameState, sequence: FloatArray): Double {
