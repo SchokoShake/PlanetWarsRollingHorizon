@@ -60,7 +60,7 @@ def objective(trial: optuna.Trial):
     try:
         # 4. Send the parameters to the Kotlin server
         # Increased timeout for potentially longer evaluations
-        response = requests.post(EVALUATION_URL, json=params, timeout=300)
+        response = requests.post(EVALUATION_URL, json=params)
         response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
 
         # 5. Get the score from the response
@@ -84,7 +84,7 @@ if __name__ == "__main__":
 
     # 2. Start the optimization. Optuna will call the `objective` function.
     # n_trials is the total number of evaluations to run.
-    study.optimize(objective, n_trials=1) # Increased trials for a more thorough search
+    study.optimize(objective, n_trials=100) # Increased trials for a more thorough search
 
     # 3. Print the best results
     print("\n----- Optimization Finished -----")

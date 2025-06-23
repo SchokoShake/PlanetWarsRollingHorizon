@@ -101,7 +101,7 @@ fun main() {
                     val parameterSet = createParameterSetFromTrial(trialParams)
 
                     // You can reduce numGames to 1 or 5 for a quick test to see if the server responds fast.
-                    val score = evaluateRheaAgent(parameterSet, numGames = 2)
+                    val score = evaluateRheaAgent(parameterSet, numGames = 100)
 
                     println(" -> Overall Score for trial: ${"%.4f".format(score)}")
                     call.respond(HttpStatusCode.OK, mapOf("score" to score))
@@ -160,7 +160,7 @@ suspend fun evaluateRheaAgent(params: ParameterSet, numGames: Int): Double {
                 println("    - Playing vs ${opponent.javaClass.simpleName} ($numGames games)...")
                 val gameParams = GameParams(numPlanets = 20)
                 val gameRunner = GameRunner(agent1 = rheaAgent.copy(), agent2 = opponent, gameParams = gameParams)
-                val matchResults = gameRunner.runGamesConcurrently(numGames)
+                val matchResults = gameRunner.runGamesConcurrently(numGames,17)
                 val p1Wins = matchResults.getOrDefault(Player.Player1, 0)
                 val totalGames = matchResults.values.sum()
                 val winRate = if (totalGames > 0) p1Wins.toDouble() / totalGames else 0.0
