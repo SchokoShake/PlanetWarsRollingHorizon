@@ -1,19 +1,16 @@
 package games.planetwars.view
 
 import games.planetwars.agents.DoNothingAgent
-import games.planetwars.agents.random.BetterRandomAgent
-import games.planetwars.agents.random.CarefulRandomAgent
-import games.planetwars.agents.random.PureRandomAgent
-import games.planetwars.agents.rhea.RheaAgent
 import games.planetwars.agents.rhea.Crossover
 import games.planetwars.agents.rhea.FitnessFunction
 import games.planetwars.agents.rhea.InitializationMethod
 import games.planetwars.agents.rhea.Mutation
 import games.planetwars.agents.rhea.ParentSelectionStrategy
+import games.planetwars.agents.rhea.RheaAgent
 import games.planetwars.core.GameParams
-import games.planetwars.runners.GameRunner
 import games.planetwars.core.GameStateFactory
 import games.planetwars.core.Player
+import games.planetwars.runners.GameRunner
 import xkg.jvm.AppLauncher
 
 fun main() {
@@ -25,23 +22,25 @@ fun main() {
             populationSize = 20,
             numberElites = 8,
             mutation = Mutation.Uniform(0.2),
-            evaluationOpponentAgent = RheaAgent(
-                    sequenceLength = 100,
-                    populationSize = 2,
-                    numberElites = 1,
-                    mutation = Mutation.Uniform(0.2),
-                    evaluationOpponentAgent = DoNothingAgent(),
-                    initializationMethod =  InitializationMethod.None,
-                    fitnessFunction = FitnessFunction.Ships,
-                    useVariableShipCount =  true,
-            ),
+            evaluationOpponentAgent = DoNothingAgent(),
             parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.2),
             crossover = Crossover.Uniform,
             initializationMethod =  InitializationMethod.ISLA(),
-            fitnessFunction = FitnessFunction.Ships,
+            fitnessFunction = FitnessFunction.Balanced(),
             useVariableShipCount =  true,
     )
-    val agent2 = CarefulRandomAgent()
+    val agent2 = RheaAgent(
+            sequenceLength = 400,
+            populationSize = 20,
+            numberElites = 8,
+            mutation = Mutation.Uniform(0.2),
+            evaluationOpponentAgent = DoNothingAgent(),
+            parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.2),
+            crossover = Crossover.Uniform,
+            initializationMethod =  InitializationMethod.ISLA(),
+            fitnessFunction = FitnessFunction.Aggressive(),
+            useVariableShipCount =  true,
+    )
 
     val gameRunner = GameRunner(agent1, agent2, gameParams)
 

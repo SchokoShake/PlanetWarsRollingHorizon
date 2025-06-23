@@ -9,7 +9,6 @@ import games.planetwars.agents.PlanetWarsAgent
 import games.planetwars.agents.PlanetWarsPlayer
 import games.planetwars.agents.evo.SimpleEvoAgent
 import games.planetwars.agents.random.BetterRandomAgent
-import games.planetwars.agents.random.PureRandomAgent
 import games.planetwars.agents.rhea.Crossover
 import games.planetwars.agents.rhea.FitnessFunction
 import games.planetwars.agents.rhea.InitializationMethod
@@ -18,7 +17,6 @@ import games.planetwars.agents.rhea.ParentSelectionStrategy
 import games.planetwars.agents.rhea.RheaAgent
 import games.planetwars.core.GameParams
 import games.planetwars.core.Player
-import kotlinx.coroutines.runBlocking
 import ntbea.NTupleBanditEA
 import ntbea.NTupleSystem
 import ntbea.NTupleSystemReport
@@ -106,9 +104,9 @@ data class RheaParameterOptions(
         val fitnessFunctions: List<FitnessFunction> = listOf(
                 FitnessFunction.Ratio,
                 FitnessFunction.Ships,
-                FitnessFunction.Aggressive,
-                FitnessFunction.Hybrid,
-                FitnessFunction.Balanced
+                FitnessFunction.Aggressive(),
+                FitnessFunction.Hybrid(),
+                FitnessFunction.Balanced()
         ),
         val useVariableShipCounts: List<Boolean> = listOf(true)
 )
@@ -133,7 +131,7 @@ class RheaParameterEvaluator(
             crossover = Crossover.N_Point(2),
             sequenceLength = 200,
             evaluationOpponentAgent = DoNothingAgent(),
-            initializationMethod = InitializationMethod.ISLA,
+            initializationMethod = InitializationMethod.ISLA(),
             fitnessFunction = FitnessFunction.Ships,
             useVariableShipCount = true
         ),

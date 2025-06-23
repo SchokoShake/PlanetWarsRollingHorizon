@@ -4,8 +4,13 @@ import games.planetwars.agents.Action
 import games.planetwars.agents.DoNothingAgent
 import games.planetwars.agents.PlanetWarsAgent
 import games.planetwars.agents.PlanetWarsPlayer
-import games.planetwars.core.*
-import kotlin.math.*
+import games.planetwars.core.ForwardModel
+import games.planetwars.core.GameParams
+import games.planetwars.core.GameState
+import games.planetwars.core.Planet
+import games.planetwars.core.Player
+import kotlin.math.ceil
+import kotlin.math.exp
 import kotlin.random.Random
 data class RheaGameStateWrapper(
         val gameState: GameState,
@@ -152,19 +157,19 @@ sealed class FitnessFunction {
         override fun toString(): String = "G"
     }
 
-    data object Aggressive : FitnessFunction() {
-        override fun toString(): String = "A"
+    class Aggressive(val p:Double =100.0, val s:Double=1.0,val e:Double =10000.0,val t:Double=1.0) : FitnessFunction() {
+        override fun toString(): String = "A,$p,$s,$e,$t"
     }
 
-    data object Balanced : FitnessFunction() {
-        override fun toString(): String = "B"
+    class Balanced(val g:Double=200.0, val s:Double=1.0) : FitnessFunction() {
+        override fun toString(): String = "B,$g,$s"
     }
 
-    data object Hybrid : FitnessFunction() {
-        override fun toString(): String = "H"
+    class Hybrid(val a:Double=0.5, val b:Double=0.5) : FitnessFunction() {
+        override fun toString(): String = "H,$a,$b"
     }
 
-    data object Strategic : FitnessFunction() {
+    class Strategic(val p:Double=20.0, val g:Double=1.0,val s:Double=1.0,val e:Double=1.0,val t:Double=0.5) : FitnessFunction() {
         override fun toString(): String = "ST"
     }
 }
@@ -619,10 +624,10 @@ data class RheaAgent(
             is FitnessFunction.Ratio -> fitnessRatio(forwardModel, player)
             is FitnessFunction.Growth -> fitnessGrowthDiff(forwardModel, player)
             is FitnessFunction.Ships -> forwardModel.getShips(player) - forwardModel.getShips(player.opponent())
-            is FitnessFunction.Aggressive -> fitnessAggressive(forwardModel, player)
-            is FitnessFunction.Balanced -> fitnessBalanced(forwardModel, player)
-            is FitnessFunction.Hybrid -> fitnessHybrid(forwardModel, player)
-            is FitnessFunction.Strategic -> fitnessStrategic(forwardModel, player)
+            is FitnessFunction.Aggressive -> fitnessAggressive(fitnessFunction as FitnessFunction.Aggressive,forwardModel, player)
+            is FitnessFunction.Balanced -> fitnessBalanced(fitnessFunction as FitnessFunction.Balanced,forwardModel, player)
+            is FitnessFunction.Hybrid -> fitnessHybrid(fitnessFunction as FitnessFunction.Hybrid,forwardModel, player)
+            is FitnessFunction.Strategic -> fitnessStrategic(fitnessFunction as FitnessFunction.Strategic,forwardModel, player)
         }
     }
 
@@ -651,17 +656,17 @@ data class RheaAgent(
         }
     }
 
-    private fun fitnessAggressive(forwardModel: ForwardModel, player: Player): Double {
+    private fun fitnessAggressive(fitness: FitnessFunction.Aggressive, forwardModel: ForwardModel, player: Player): Double {
         val myPlanets = forwardModel.state.planets.count { it.owner == player }
         val enemyPlanets = forwardModel.state.planets.count { it.owner == player.opponent() }
         val myShips = forwardModel.getShips(player)
         val enemyShips = forwardModel.getShips(player.opponent())
         val gameTick = forwardModel.state.gameTick
 
-        val planetWeight = 100.0
-        val shipWeight = 1.0
-        val eliminationBonus = 10000.0
-        val timePenaltyWeight = 1.0
+        val planetWeight = fitness.p
+        val shipWeight = fitness.s
+        val eliminationBonus = fitness.e
+        val timePenaltyWeight = fitness.t
 
         val baseScore = (planetWeight * (myPlanets - enemyPlanets)) +
                 (shipWeight * (myShips - enemyShips)) -
@@ -670,7 +675,7 @@ data class RheaAgent(
         return if (enemyPlanets == 0) baseScore + eliminationBonus else baseScore
     }
 
-    private fun fitnessBalanced(forwardModel: ForwardModel, player: Player): Double {
+    private fun fitnessBalanced(fitness: FitnessFunction.Balanced, forwardModel: ForwardModel, player: Player): Double {
         val myPlanets = forwardModel.state.planets.filter { it.owner == player }
         val enemyPlanets = forwardModel.state.planets.filter { it.owner == player.opponent() }
 
@@ -679,20 +684,20 @@ data class RheaAgent(
         val myShips = forwardModel.getShips(player)
         val enemyShips = forwardModel.getShips(player.opponent())
 
-        val growthWeight = 200.0
-        val shipWeight = 1.0
+        val growthWeight = fitness.g
+        val shipWeight = fitness.s
 
         return (growthWeight * (myGrowth - enemyGrowth)) +
                 (shipWeight * (myShips - enemyShips))
     }
 
-    private fun fitnessHybrid(forwardModel: ForwardModel, player: Player): Double {
+    private fun fitnessHybrid(forwardModel1: FitnessFunction.Hybrid, forwardModel: ForwardModel, player: Player): Double {
         val alpha = 0.5 // weight for aggressive
         val beta = 0.5  // weight for balanced
-        return alpha * fitnessAggressive(forwardModel, player) + beta * fitnessBalanced(forwardModel, player)
+        return alpha * fitnessAggressive(FitnessFunction.Aggressive(), forwardModel, player) + beta * fitnessBalanced(FitnessFunction.Balanced(), forwardModel, player)
     }
 
-    private fun fitnessStrategic(forwardModel: ForwardModel, player: Player): Double {
+    private fun fitnessStrategic(fitness: FitnessFunction.Strategic, forwardModel: ForwardModel, player: Player): Double {
         val gameTick = forwardModel.state.gameTick
 
         return if (gameTick < 1000) { // assuming a game of 2000 ticks
@@ -702,8 +707,8 @@ data class RheaAgent(
             val myGrowth = myPlanets.sumOf { it.growthRate }
             val enemyGrowth = enemyPlanets.sumOf { it.growthRate }
 
-            val planetWeight = 1.0
-            val growthWeight = 20.0
+            val planetWeight = fitness.p //1
+            val growthWeight = fitness.g //20
 
             (planetWeight * (myPlanets.size - enemyPlanets.size)) +
                     (growthWeight * (myGrowth - enemyGrowth))
@@ -712,9 +717,9 @@ data class RheaAgent(
             val myShips = forwardModel.getShips(player)
             val enemyShips = forwardModel.getShips(player.opponent())
 
-            val shipWeight = 1.0
-            val eliminationBonus = 10000.0
-            val timePenaltyWeight = 0.5
+            val shipWeight = fitness.s //1
+            val eliminationBonus = fitness.e //10000
+            val timePenaltyWeight = fitness.t //0.5
 
             val baseScore = (shipWeight * (myShips - enemyShips)) - (timePenaltyWeight * gameTick)
             val enemyPlanetsRemaining = forwardModel.state.planets.any { it.owner == player.opponent() }
