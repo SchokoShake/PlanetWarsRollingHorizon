@@ -34,18 +34,39 @@ import java.util.concurrent.Executors
 
 /**
  * A data class defining the JSON structure for requests from the Optuna Python client.
+ * This has been updated to support conditional parameters for fitness and initialization.
  */
 @Serializable
 data class RheaTrialParams(
+        // Core RHEA Params
         val sequenceLength: Int,
         val populationSize: Int,
         val elitePercentage: Double,
         val mutationIndex: Double,
         val parentSelectionTournamentSize: Double,
         val crossoverIndex: Int,
-        val initializationIndex: Int,
-        val fitnessFunctionIndex: Int
+
+        // Conditional: Initialization
+        val initialization_method: String, // "None" or "ISLA"
+        val isla_percent: Double? = null,
+
+        // Conditional: Fitness Function
+        val fitness_function: String, // "Ratio", "Ships", "Aggressive", etc.
+        val aggressive_p: Double? = null,
+        val aggressive_s: Double? = null,
+        val aggressive_e: Double? = null,
+        val aggressive_t: Double? = null,
+        val balanced_g: Double? = null,
+        val balanced_s: Double? = null,
+        val hybrid_a: Double? = null,
+        val hybrid_b: Double? = null,
+        val strategic_p: Double? = null,
+        val strategic_g: Double? = null,
+        val strategic_s: Double? = null,
+        val strategic_e: Double? = null,
+        val strategic_t: Double? = null
 )
+
 
 // =================================================================================
 // ==                        CONCURRENCY CONTROLLER                               ==
@@ -76,11 +97,11 @@ fun main() {
                 println("POST /evaluate handler entered. Attempting to receive payload...")
                 try {
                     val trialParams = call.receive<RheaTrialParams>()
-                    println("Received trial: popSize=${trialParams.populationSize}, seqLen=${trialParams.sequenceLength}...")
+                    println("Received trial: popSize=${trialParams.populationSize}, fitness=${trialParams.fitness_function}...")
                     val parameterSet = createParameterSetFromTrial(trialParams)
 
                     // You can reduce numGames to 1 or 5 for a quick test to see if the server responds fast.
-                    val score = evaluateRheaAgent(parameterSet, numGames = 20)
+                    val score = evaluateRheaAgent(parameterSet, numGames = 2)
 
                     println(" -> Overall Score for trial: ${"%.4f".format(score)}")
                     call.respond(HttpStatusCode.OK, mapOf("score" to score))
@@ -137,7 +158,7 @@ suspend fun evaluateRheaAgent(params: ParameterSet, numGames: Int): Double {
         baselineOpponents.map { opponent ->
             async(limitedParallelismDispatcher) { // <-- USE THE LIMITED DISPATCHER
                 println("    - Playing vs ${opponent.javaClass.simpleName} ($numGames games)...")
-                val gameParams = GameParams(numPlanets = 10)
+                val gameParams = GameParams(numPlanets = 20)
                 val gameRunner = GameRunner(agent1 = rheaAgent.copy(), agent2 = opponent, gameParams = gameParams)
                 val matchResults = gameRunner.runGamesConcurrently(numGames)
                 val p1Wins = matchResults.getOrDefault(Player.Player1, 0)
@@ -153,9 +174,50 @@ suspend fun evaluateRheaAgent(params: ParameterSet, numGames: Int): Double {
 }
 
 
+/**
+ * Creates a ParameterSet from the incoming Optuna trial data.
+ * This now uses 'when' statements to dynamically construct FitnessFunction
+ * and InitializationMethod objects with their own optimized parameters.
+ */
 fun createParameterSetFromTrial(trial: RheaTrialParams): ParameterSet {
     val options = ParameterOptions()
     val numberElites = (trial.populationSize * trial.elitePercentage).toInt().coerceAtLeast(1)
+
+    val initializationMethod = when (trial.initialization_method) {
+        "ISLA" -> InitializationMethod.ISLA(trial.isla_percent ?: 1.0)
+        "None" -> InitializationMethod.None
+        else -> throw IllegalArgumentException("Unknown initialization method: ${trial.initialization_method}")
+    }
+
+    val fitnessFunction = when (trial.fitness_function) {
+        "Ratio" -> FitnessFunction.Ratio
+        "Ships" -> FitnessFunction.Ships
+        "Growth" -> FitnessFunction.Growth
+        "Aggressive" -> FitnessFunction.Aggressive(
+                p = trial.aggressive_p ?: 100.0,
+                s = trial.aggressive_s ?: 1.0,
+                e = trial.aggressive_e ?: 10000.0,
+                t = trial.aggressive_t ?: 1.0
+        )
+        "Balanced" -> FitnessFunction.Balanced(
+                g = trial.balanced_g ?: 200.0,
+                s = trial.balanced_s ?: 1.0
+        )
+        "Hybrid" -> FitnessFunction.Hybrid(
+                a = trial.hybrid_a ?: 0.5,
+                b = trial.hybrid_b ?: 0.5
+        )
+        "Strategic" -> FitnessFunction.Strategic(
+                p = trial.strategic_p ?: 20.0,
+                g = trial.strategic_g ?: 1.0,
+                s = trial.strategic_s ?: 1.0,
+                e = trial.strategic_e ?: 1.0,
+                t = trial.strategic_t ?: 0.5
+        )
+        else -> throw IllegalArgumentException("Unknown fitness function: ${trial.fitness_function}")
+    }
+
+
     return ParameterSet(
             sequenceLength = trial.sequenceLength,
             populationSize = trial.populationSize,
@@ -164,8 +226,8 @@ fun createParameterSetFromTrial(trial: RheaTrialParams): ParameterSet {
             parentSelectionStrategy = ParentSelectionStrategy.Tournament(trial.parentSelectionTournamentSize),
             crossover = options.crossovers[trial.crossoverIndex],
             evaluationOpponentAgent = options.evaluationOpponentAgents[0],
-            initializationMethod = options.initializationMethods[trial.initializationIndex],
-            fitnessFunction = options.fitnessFunctions[trial.fitnessFunctionIndex],
+            initializationMethod = initializationMethod, // Dynamically created
+            fitnessFunction = fitnessFunction,           // Dynamically created
             useVariableShipCount = true
     )
 }
@@ -180,16 +242,15 @@ data class ParameterSet(val sequenceLength: Int,
                         var initializationMethod: InitializationMethod,
                         var fitnessFunction: FitnessFunction,
                         var useVariableShipCount: Boolean )
+
+/**
+ * The ParameterOptions class now only contains options for parameters
+ * that are still selected by index.
+ */
 data class ParameterOptions(
         val mutations: List<Mutation> = listOf(Mutation.Uniform(0.1), Mutation.n_bit(20)),
         val crossovers: List<Crossover> = listOf(Crossover.Uniform, Crossover.N_Point(1), Crossover.N_Point(2)),
-        val evaluationOpponentAgents: List<PlanetWarsAgent> = listOf(DoNothingAgent()),
-        val initializationMethods: List<InitializationMethod> = listOf(InitializationMethod.None, InitializationMethod.ISLA()),
-        val fitnessFunctions: List<FitnessFunction> = listOf(
-                FitnessFunction.Ratio,
-                FitnessFunction.Ships,
-                FitnessFunction.Aggressive(),
-                FitnessFunction.Hybrid(),
-                FitnessFunction.Balanced()
-        )
+        val evaluationOpponentAgents: List<PlanetWarsAgent> = listOf(DoNothingAgent())
+        // The fitnessFunctions and initializationMethods lists are removed,
+        // as they are now constructed dynamically based on name.
 )
