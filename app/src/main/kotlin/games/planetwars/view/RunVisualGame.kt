@@ -1,6 +1,8 @@
 package games.planetwars.view
 
 import games.planetwars.agents.DoNothingAgent
+import games.planetwars.agents.GreedyHeuristicAgent
+import games.planetwars.agents.PlanetWarsAgent
 import games.planetwars.agents.rhea.Crossover
 import games.planetwars.agents.rhea.FitnessFunction
 import games.planetwars.agents.rhea.InitializationMethod
@@ -12,35 +14,49 @@ import games.planetwars.core.GameStateFactory
 import games.planetwars.core.Player
 import games.planetwars.runners.GameRunner
 import xkg.jvm.AppLauncher
-
+val popSize=142;
+fun getFullList(): MutableList<PlanetWarsAgent> {
+    return mutableListOf(
+            RheaAgent(
+                    name = "Aggressive",
+                    sequenceLength = 69,
+                    populationSize = popSize,
+                    numberElites = (popSize * 0.067).toInt(),
+                    mutation = Mutation.n_bit(8),
+                    evaluationOpponentAgent = DoNothingAgent(),
+                    parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.121),
+                    crossover = Crossover.Uniform,
+                    initializationMethod = InitializationMethod.None,
+                    fitnessFunction = FitnessFunction.Aggressive(
+                            p = 12.9,
+                            s = 2.5,
+                            t = 0.9
+                    ),
+                    useVariableShipCount = true,
+            ),
+            RheaAgent(
+                    name = "Ships",
+                    sequenceLength = 194,
+                    populationSize = popSize,
+                    numberElites = (popSize * 0.09513517486976772).toInt(),
+                    mutation = Mutation.Uniform(0.12031591154944632),
+                    evaluationOpponentAgent = DoNothingAgent(),
+                    parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.3254484700263845),
+                    crossover = Crossover.Uniform,
+                    initializationMethod = InitializationMethod.None,
+                    fitnessFunction = FitnessFunction.Ships,
+                    useVariableShipCount = true,
+            ),
+            GreedyHeuristicAgent()
+    )
+}
 fun main() {
-    val gameParams = GameParams(numPlanets = 20, maxTicks = 1000)
+    val gameParams = GameParams(numPlanets =12, maxTicks = 1000,width=400,height=300, edgeSeparation = 50.0, radialSeparation = 3.0)
     val gameState = GameStateFactory(gameParams).createGame()
 
-    val agent1 = RheaAgent(
-            sequenceLength = 400,
-            populationSize = 20,
-            numberElites = 8,
-            mutation = Mutation.Uniform(0.2),
-            evaluationOpponentAgent = DoNothingAgent(),
-            parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.2),
-            crossover = Crossover.Uniform,
-            initializationMethod =  InitializationMethod.ISLA(),
-            fitnessFunction = FitnessFunction.Balanced(),
-            useVariableShipCount =  true,
-    )
-    val agent2 = RheaAgent(
-            sequenceLength = 400,
-            populationSize = 20,
-            numberElites = 8,
-            mutation = Mutation.Uniform(0.2),
-            evaluationOpponentAgent = DoNothingAgent(),
-            parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.2),
-            crossover = Crossover.Uniform,
-            initializationMethod =  InitializationMethod.ISLA(),
-            fitnessFunction = FitnessFunction.Aggressive(),
-            useVariableShipCount =  true,
-    )
+    val agent1 = getFullList()[1]
+
+    val agent2 = getFullList()[2]
 
     val gameRunner = GameRunner(agent1, agent2, gameParams)
 

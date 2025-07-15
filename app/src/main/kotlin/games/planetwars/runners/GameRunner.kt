@@ -1,9 +1,19 @@
 package games.planetwars.runners
 
+import games.planetwars.agents.DoNothingAgent
 import games.planetwars.agents.PlanetWarsAgent
 import games.planetwars.agents.random.BetterRandomAgent
-import games.planetwars.agents.random.PureRandomAgent
-import games.planetwars.core.*
+import games.planetwars.agents.rhea.Crossover
+import games.planetwars.agents.rhea.FitnessFunction
+import games.planetwars.agents.rhea.InitializationMethod
+import games.planetwars.agents.rhea.Mutation
+import games.planetwars.agents.rhea.ParentSelectionStrategy
+import games.planetwars.agents.rhea.RheaAgent
+import games.planetwars.core.ForwardModel
+import games.planetwars.core.GameParams
+import games.planetwars.core.GameState
+import games.planetwars.core.GameStateFactory
+import games.planetwars.core.Player
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -124,13 +134,24 @@ data class GameRunner(
 fun main() {
     val gameParams = GameParams(numPlanets = 20)
 //    val gameState = GameStateFactory(gameParams).createGame()
-    val agent1 = PureRandomAgent()
+    val agent1 = RheaAgent(
+        sequenceLength = 100,
+        populationSize = 159,
+        numberElites = (159*0.1742).toInt(),
+        mutation = Mutation.Uniform(0.07538),
+        evaluationOpponentAgent = DoNothingAgent(),
+        parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.1388),
+        crossover = Crossover.Uniform,
+        initializationMethod =  InitializationMethod.None,
+        fitnessFunction = FitnessFunction.Ratio,
+        useVariableShipCount =  true,
+    )
     val agent2 = BetterRandomAgent()
     val gameRunner = GameRunner(agent1, agent2, gameParams)
     val finalModel = gameRunner.runGame()
     println("Game over!")
     println(finalModel.statusString())
-    val nGames = 1000
+    val nGames = 1
     val t = System.currentTimeMillis()
     val results = gameRunner.runGames(nGames)
     val dt = System.currentTimeMillis() - t

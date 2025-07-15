@@ -1,10 +1,6 @@
 package games.planetwars.agents
-import games.planetwars.agents.Action
-import games.planetwars.agents.PlanetWarsPlayer
 import games.planetwars.core.GameState
 import games.planetwars.core.Player
-import games.planetwars.core.Planet
-import kotlin.math.max
 class GreedyHeuristicAgent : PlanetWarsPlayer() {
     override fun getAction(gameState: GameState): Action {
         // Planets owned by us with no current transporter
@@ -35,5 +31,5 @@ class GreedyHeuristicAgent : PlanetWarsPlayer() {
         return Action(player, source.id, target.id, shipsToSend)
     }
 
-    override fun getAgentType(): String = "Greedy Heuristic Agent"
+    override fun getAgentType(): String = "Greedy"
 }

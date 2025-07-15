@@ -8,6 +8,6 @@ class DoNothingAgent : PlanetWarsPlayer() {
     }
 
     override fun getAgentType(): String {
-        return "DoNothingAgent"
+        return "DNA"
     }
 }

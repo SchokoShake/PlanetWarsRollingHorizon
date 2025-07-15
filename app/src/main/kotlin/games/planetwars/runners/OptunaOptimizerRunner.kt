@@ -33,28 +33,38 @@ import kotlinx.serialization.Serializable
 import java.util.concurrent.Executors
 
 /**
- * A data class defining the JSON structure for requests from the Optuna Python client.
- * This has been updated to support conditional parameters for fitness and initialization.
+ * **[UPDATED]** The JSON structure expected from the Optuna client.
+ * This now matches the full, hierarchical parameter set.
  */
 @Serializable
 data class RheaTrialParams(
-        // Core RHEA Params
+        // Core Agent Parameters
         val sequenceLength: Int,
         val populationSize: Int,
-        val elitePercentage: Double,
-        val mutationIndex: Double,
-        val parentSelectionTournamentSize: Double,
-        val crossoverIndex: Int,
+        val numberElites: Int,
+        val useVariableShipCount: Boolean,
 
-        // Conditional: Initialization
-        val initialization_method: String, // "None" or "ISLA"
+        // Parent Selection Strategy (Conditional)
+        val parentSelectionStrategy: String,
+        val tournament_t: Double? = null,
+
+        // Crossover Method (Conditional)
+        val crossover_method: String,
+        val crossover_n_point_n: Int? = null,
+
+        // Mutation Method (Conditional)
+        val mutation_method: String,
+        val mutation_uniform_probability: Double? = null,
+        val mutation_n_bit_n: Int? = null,
+
+        // Initialization Method (Conditional)
+        val initialization_method: String,
         val isla_percent: Double? = null,
 
-        // Conditional: Fitness Function
-        val fitness_function: String, // "Ratio", "Ships", "Aggressive", etc.
+        // Fitness Function (Conditional)
+        val fitness_function: String,
         val aggressive_p: Double? = null,
         val aggressive_s: Double? = null,
-        val aggressive_e: Double? = null,
         val aggressive_t: Double? = null,
         val balanced_g: Double? = null,
         val balanced_s: Double? = null,
@@ -63,25 +73,17 @@ data class RheaTrialParams(
         val strategic_p: Double? = null,
         val strategic_g: Double? = null,
         val strategic_s: Double? = null,
-        val strategic_e: Double? = null,
         val strategic_t: Double? = null
 )
 
-
 // =================================================================================
 // ==                        CONCURRENCY CONTROLLER                               ==
-// == This dispatcher limits the number of concurrent simulations, preventing    ==
-// == memory spikes and making resource usage more predictable.                  ==
 // =================================================================================
-// Determine the number of processors, but don't use more than 4 to be safe.
 val parallelism = (Runtime.getRuntime().availableProcessors() / 2).toInt().coerceAtLeast(1)
 val limitedParallelismDispatcher: CoroutineDispatcher = Executors.newFixedThreadPool(parallelism).asCoroutineDispatcher()
 // =================================================================================
 
 
-/**
- * A minimal Ktor server for debugging purposes.
- */
 fun main() {
     println("Starting RheaAgent Ktor evaluation server with parallelism of $parallelism...")
     embeddedServer(Netty, port = 8080, host = "0.0.0.0") {
@@ -93,15 +95,13 @@ fun main() {
                 call.respondText("RheaAgent Evaluation Server is running. POST to /evaluate to run a trial.")
             }
             post("/evaluate") {
-                // ADDED a log here to confirm the route is being hit immediately.
                 println("POST /evaluate handler entered. Attempting to receive payload...")
                 try {
                     val trialParams = call.receive<RheaTrialParams>()
                     println("Received trial: popSize=${trialParams.populationSize}, fitness=${trialParams.fitness_function}...")
                     val parameterSet = createParameterSetFromTrial(trialParams)
 
-                    // You can reduce numGames to 1 or 5 for a quick test to see if the server responds fast.
-                    val score = evaluateRheaAgent(parameterSet, numGames = 100)
+                    val score = evaluateRheaAgent(parameterSet, numGames = 50)
 
                     println(" -> Overall Score for trial: ${"%.4f".format(score)}")
                     call.respond(HttpStatusCode.OK, mapOf("score" to score))
@@ -110,18 +110,15 @@ fun main() {
                     println("!!!!!!!!!!!!!! FATAL ERROR DURING TRIAL !!!!!!!!!!!!!!")
                     t.printStackTrace()
                     println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-                    call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (t.message ?: "Unknown fatal error")))
+                    call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (t.message
+                            ?: "Unknown fatal error")))
                 }
             }
         }
     }.start(wait = true)
 }
 
-/**
- * The objective function. This version now uses the LIMITED dispatcher and has more logging.
- */
 suspend fun evaluateRheaAgent(params: ParameterSet, numGames: Int): Double {
-    // The agent to be evaluated, created with the parameters from Optuna.
     val rheaAgent = RheaAgent(
             populationSize = params.populationSize,
             numberElites = params.numberElites,
@@ -134,54 +131,89 @@ suspend fun evaluateRheaAgent(params: ParameterSet, numGames: Int): Double {
             fitnessFunction = params.fitnessFunction,
             useVariableShipCount = params.useVariableShipCount
     )
-
-    // A list of standard agents to play against for a robust evaluation.
+    val popSize = 100
+    // Opponent list for evaluation remains the same
     val baselineOpponents: List<PlanetWarsPlayer> = listOf(
+
             RheaAgent(
-                    sequenceLength = 100,
-                    populationSize = 159,
-                    numberElites = (159*0.1742).toInt(),
-                    mutation = Mutation.Uniform(0.07538),
+                    name = "Aggressive",
+                    sequenceLength = 200,
+                    populationSize = popSize,
+                    numberElites = (popSize * 0.08264086470511658).toInt(),
+                    mutation = Mutation.Uniform(0.21167624014522854),
                     evaluationOpponentAgent = DoNothingAgent(),
-                    parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.1388),
-                    crossover = Crossover.Uniform,
-                    initializationMethod =  InitializationMethod.None,
-                    fitnessFunction = FitnessFunction.Ratio,
-                    useVariableShipCount =  true,
-            ),
-    )
+                    parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.41799476491642257),
+                    crossover = Crossover.N_Point(1),
+                    initializationMethod = InitializationMethod.None,
+                    fitnessFunction = FitnessFunction.Aggressive(
+                            p = 12.962038495865517,
+                            s = 1.5740955651632729,
+                            t = 0.9789946264613008
+                    ),
+                    useVariableShipCount = true,
+                    ),
 
+            RheaAgent(
+                    name = "Ships",
+                    sequenceLength = 106,
+                    populationSize = popSize,
+                    numberElites = (popSize * 0.11911396819456829).toInt(),
+                    mutation = Mutation.Uniform(0.22767074124325212),
+                    evaluationOpponentAgent = DoNothingAgent(),
+                    parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.22200160795126606),
+                    crossover = Crossover.N_Point(1),
+                    initializationMethod = InitializationMethod.ISLA(0.8558942212210189),
+                    fitnessFunction = FitnessFunction.Ships,
+                    useVariableShipCount = true,
+                    ),
+            )
     println(" -> Starting evaluation against ${baselineOpponents.size} opponents...")
-
-    // Run all opponent matchups using our new, controlled dispatcher
     val results = coroutineScope {
         baselineOpponents.map { opponent ->
-            async(limitedParallelismDispatcher) { // <-- USE THE LIMITED DISPATCHER
-                println("    - Playing vs ${opponent.javaClass.simpleName} ($numGames games)...")
-                val gameParams = GameParams(numPlanets = 20)
+            async(limitedParallelismDispatcher) {
+                println("    - Playing vs ${opponent.getAgentType()} ($numGames games)...")
+                val gameParams = GameParams(numPlanets = 20, maxTicks = 1000)
                 val gameRunner = GameRunner(agent1 = rheaAgent.copy(), agent2 = opponent, gameParams = gameParams)
-                val matchResults = gameRunner.runGamesConcurrently(numGames,17)
+                val matchResults = gameRunner.runGamesConcurrently(numGames, 11)
                 val p1Wins = matchResults.getOrDefault(Player.Player1, 0)
                 val totalGames = matchResults.values.sum()
                 val winRate = if (totalGames > 0) p1Wins.toDouble() / totalGames else 0.0
-                println("    - Finished vs ${opponent.javaClass.simpleName}. Win rate: ${"%.3f".format(winRate)}")
+                println("    - Finished vs ${opponent.getAgentType()}. Win rate: ${"%.3f".format(winRate)}")
                 winRate
             }
         }.awaitAll()
     }
-
     return results.average()
 }
 
-
 /**
- * Creates a ParameterSet from the incoming Optuna trial data.
- * This now uses 'when' statements to dynamically construct FitnessFunction
- * and InitializationMethod objects with their own optimized parameters.
+ * **[REWRITTEN]** Creates a ParameterSet from the full Optuna trial data.
+ * This uses 'when' statements to dynamically construct all parameter objects.
  */
 fun createParameterSetFromTrial(trial: RheaTrialParams): ParameterSet {
     val options = ParameterOptions()
-    val numberElites = (trial.populationSize * trial.elitePercentage).toInt().coerceAtLeast(1)
+
+    val parentSelectionStrategy = when (trial.parentSelectionStrategy) {
+        "Random" -> ParentSelectionStrategy.Random
+        "Roulette" -> ParentSelectionStrategy.Roulette
+        "Rank" -> ParentSelectionStrategy.Rank
+        "Tournament" -> ParentSelectionStrategy.Tournament(trial.tournament_t ?: 0.1)
+        else -> throw IllegalArgumentException("Unknown parent selection: ${trial.parentSelectionStrategy}")
+    }
+
+    val crossover = when (trial.crossover_method) {
+        "None" -> Crossover.None
+        "Uniform" -> Crossover.Uniform
+        "N_Point" -> Crossover.N_Point(trial.crossover_n_point_n ?: 1)
+        else -> throw IllegalArgumentException("Unknown crossover: ${trial.crossover_method}")
+    }
+
+    val mutation = when (trial.mutation_method) {
+        "Softmax" -> Mutation.Softmax
+        "Uniform" -> Mutation.Uniform(trial.mutation_uniform_probability ?: 0.1)
+        "n_bit" -> Mutation.n_bit(trial.mutation_n_bit_n ?: 1)
+        else -> throw IllegalArgumentException("Unknown mutation: ${trial.mutation_method}")
+    }
 
     val initializationMethod = when (trial.initialization_method) {
         "ISLA" -> InitializationMethod.ISLA(trial.isla_percent ?: 1.0)
@@ -196,61 +228,60 @@ fun createParameterSetFromTrial(trial: RheaTrialParams): ParameterSet {
         "Aggressive" -> FitnessFunction.Aggressive(
                 p = trial.aggressive_p ?: 100.0,
                 s = trial.aggressive_s ?: 1.0,
-                e = trial.aggressive_e ?: 10000.0,
                 t = trial.aggressive_t ?: 1.0
         )
+
         "Balanced" -> FitnessFunction.Balanced(
                 g = trial.balanced_g ?: 200.0,
                 s = trial.balanced_s ?: 1.0
         )
+
         "Hybrid" -> FitnessFunction.Hybrid(
                 a = trial.hybrid_a ?: 0.5,
                 b = trial.hybrid_b ?: 0.5
         )
+
         "Strategic" -> FitnessFunction.Strategic(
                 p = trial.strategic_p ?: 20.0,
                 g = trial.strategic_g ?: 1.0,
                 s = trial.strategic_s ?: 1.0,
-                e = trial.strategic_e ?: 1.0,
                 t = trial.strategic_t ?: 0.5
         )
+
         else -> throw IllegalArgumentException("Unknown fitness function: ${trial.fitness_function}")
     }
-
 
     return ParameterSet(
             sequenceLength = trial.sequenceLength,
             populationSize = trial.populationSize,
-            numberElites = numberElites,
-            mutation = Mutation.Uniform(trial.mutationIndex),
-            parentSelectionStrategy = ParentSelectionStrategy.Tournament(trial.parentSelectionTournamentSize),
-            crossover = options.crossovers[trial.crossoverIndex],
-            evaluationOpponentAgent = options.evaluationOpponentAgents[0],
-            initializationMethod = initializationMethod, // Dynamically created
-            fitnessFunction = fitnessFunction,           // Dynamically created
-            useVariableShipCount = true
+            numberElites = trial.numberElites,
+            mutation = mutation,
+            parentSelectionStrategy = parentSelectionStrategy,
+            crossover = crossover,
+            evaluationOpponentAgent = options.evaluationOpponentAgents.first(),
+            initializationMethod = initializationMethod,
+            fitnessFunction = fitnessFunction,
+            useVariableShipCount = trial.useVariableShipCount
     )
 }
 
-data class ParameterSet(val sequenceLength: Int,
-                        val populationSize: Int,
-                        val numberElites: Int,
-                        val mutation: Mutation,
-                        val parentSelectionStrategy: ParentSelectionStrategy,
-                        val crossover: Crossover,
-                        var evaluationOpponentAgent: PlanetWarsAgent,
-                        var initializationMethod: InitializationMethod,
-                        var fitnessFunction: FitnessFunction,
-                        var useVariableShipCount: Boolean )
+data class ParameterSet(
+        val sequenceLength: Int,
+        val populationSize: Int,
+        val numberElites: Int,
+        val mutation: Mutation,
+        val parentSelectionStrategy: ParentSelectionStrategy,
+        val crossover: Crossover,
+        var evaluationOpponentAgent: PlanetWarsAgent,
+        var initializationMethod: InitializationMethod,
+        var fitnessFunction: FitnessFunction,
+        var useVariableShipCount: Boolean
+)
 
 /**
- * The ParameterOptions class now only contains options for parameters
- * that are still selected by index.
+ * **[SIMPLIFIED]** The ParameterOptions class is now much simpler,
+ * as most parameters are fully defined by the Python client.
  */
 data class ParameterOptions(
-        val mutations: List<Mutation> = listOf(Mutation.Uniform(0.1), Mutation.n_bit(20)),
-        val crossovers: List<Crossover> = listOf(Crossover.Uniform, Crossover.N_Point(1), Crossover.N_Point(2)),
         val evaluationOpponentAgents: List<PlanetWarsAgent> = listOf(DoNothingAgent())
-        // The fitnessFunctions and initializationMethods lists are removed,
-        // as they are now constructed dynamically based on name.
 )

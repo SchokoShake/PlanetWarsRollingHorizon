@@ -57,8 +57,9 @@ class ForwardModel(val state: GameState, val params: GameParams) {
         return state.planets.none { it.owner == Player.Player1 } || state.planets.none { it.owner == Player.Player2 }
     }
 
-    fun statusString(): String {
-        return "Game tick: ${state.gameTick}; Player 1: ${getShips(Player.Player1).toInt()}; Player 2: ${getShips(Player.Player2).toInt()}; Leader: ${getLeader()}"
+    fun statusString(p1:String="Player 2",p2: String="Player 2"): String {
+        val leader=if(getLeader()==Player.Player1) p1 else p2;
+        return "Game tick: ${state.gameTick}; ${p1}: ${getShips(Player.Player1).toInt()}; ${p2}: ${getShips(Player.Player2).toInt()}; Leader: $leader"
     }
 
     fun getShips(player: Player): Double {

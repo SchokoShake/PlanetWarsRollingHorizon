@@ -37,7 +37,7 @@ class SlowRandomAgent(val delayMillis: Long = 1000) : PlanetWarsPlayer() {
     }
 
     override fun getAgentType(): String {
-        return "Slow Random Agent (delayMillis: ${delayMillis}ms)"
+        return "SRA (delayMillis: ${delayMillis}ms)"
     }
 }
 

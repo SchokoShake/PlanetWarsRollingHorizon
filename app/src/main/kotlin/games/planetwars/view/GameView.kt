@@ -1,9 +1,22 @@
 package games.planetwars.view
 
-import games.planetwars.core.*
+import games.planetwars.core.GameParams
+import games.planetwars.core.GameState
+import games.planetwars.core.GameStateFactory
+import games.planetwars.core.Player
+import games.planetwars.core.Transporter
 import games.planetwars.runners.GameRunner
 import util.Vec2d
-import xkg.gui.*
+import xkg.gui.TStyle
+import xkg.gui.XApp
+import xkg.gui.XEllipse
+import xkg.gui.XGraphics
+import xkg.gui.XKeyEvent
+import xkg.gui.XKeyEventType
+import xkg.gui.XPoly
+import xkg.gui.XRect
+import xkg.gui.XStyle
+import xkg.gui.XText
 import xkg.jvm.AppLauncher
 
 class GameView(
@@ -68,7 +81,7 @@ class GameView(
             xg.draw(circle)
             // draw the number of ships only if we are observing for the owner
             if (planet.owner !in showInfoFor) continue
-            val tStyle = TStyle(fg = colors.text, size = 14.0)
+            val tStyle = TStyle(fg = colors.text, size = 8.0)
             val text = XText("${planet.nShips.toInt()}", planet.position, tStyle)
             xg.draw(text)
         }
@@ -119,9 +132,9 @@ class GameView(
 
     private fun drawStatus(xg: XGraphics) {
         val runner = gameRunner ?: return
-        val status = runner.forwardModel.statusString()
-        val tStyle = TStyle(fg = colors.text, size = 14.0)
-        val text = XText("Game status: $status", Vec2d(width / 2, 20.0), tStyle)
+        val status = runner.forwardModel.statusString(p1=runner.agent1.getAgentType(),p2=runner.agent2.getAgentType())
+        val tStyle = TStyle(fg = colors.text, size = 10.0)
+        val text = XText(status, Vec2d(width / 2, 20.0), tStyle)
         xg.draw(text)
     }
 

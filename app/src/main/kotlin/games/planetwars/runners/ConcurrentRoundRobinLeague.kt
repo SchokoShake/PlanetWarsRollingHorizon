@@ -1,6 +1,7 @@
 package games.planetwars.runners
 
 import games.planetwars.agents.DoNothingAgent
+import games.planetwars.agents.GreedyHeuristicAgent
 import games.planetwars.agents.PlanetWarsAgent
 import games.planetwars.agents.random.BetterRandomAgent
 import games.planetwars.agents.random.CarefulRandomAgent
@@ -20,78 +21,108 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.Executors
 
-fun main()=runBlocking  {
-//    val agents = SamplePlayerLists().getRandomTrio()
+fun main() = runBlocking {
     val agents = CSamplePlayerLists().getFullList()
-//    agents.add(DoNothingAgent())
-    val league = ConcurrentRoundRobinLeague(agents, gamesPerPair = 10)
+    val league = ConcurrentRoundRobinLeague(agents, gamesPerPair = 250, gameParams = GameParams(numPlanets =20, maxTicks = 1000, edgeSeparation = 50.0))
     val results = league.runRoundRobin()
-    // use the League utils to print the results
-    val writer = LeagueWriter()
-    val leagueResult = LeagueResult(results.values.toList())
-    val markdownContent = writer.generateMarkdownTable(leagueResult)
-    writer.saveMarkdownToFile(markdownContent)
 
-    // print sorted results directly to console
-    val sortedResults = results.toList().sortedByDescending { it.second.points }.toMap()
-    for (entry in sortedResults.values) {
-        println("${entry.agentName} : ${entry.points} : ${entry.nGames}")
+    // Print sorted results directly to the console
+    val sortedResults = results.values.sortedByDescending { it.points }
+    for (entry in sortedResults) {
+        println("----------------------------------------------------")
+        println("${entry.agentName} | Points: ${entry.points} | Games: ${entry.nGames}")
+        println("----------------------------------------------------")
+        // Sort opponents by name for consistent output
+        val sortedOpponents = entry.outcomes.keys.sorted()
+        for(opponentName in sortedOpponents) {
+            val outcomes = entry.outcomes[opponentName]!!
+            println(
+                    "\tvs ${opponentName}: " +
+                            "W: ${outcomes.wins}, " +
+                            "L: ${outcomes.losses}, " +
+                            "D: ${outcomes.draws}"
+            )
+        }
+        println()
     }
-
 }
+
 
 class CSamplePlayerLists {
     fun getRandomTrio(): MutableList<PlanetWarsAgent> {
         return mutableListOf(
-            PureRandomAgent(),
-            BetterRandomAgent(),
-            CarefulRandomAgent(),
+                PureRandomAgent(),
+                BetterRandomAgent(),
+                CarefulRandomAgent(),
         )
     }
-
+    val popSize=142;
     fun getFullList(): MutableList<PlanetWarsAgent> {
         return mutableListOf(
                 RheaAgent(
-                        sequenceLength = 200,
-                        populationSize = 80,
-                        numberElites = 8,
-                        mutation = Mutation.Uniform(0.2),
+                        name = "Aggressive",
+                        sequenceLength = 69,
+                        populationSize = popSize,
+                        numberElites = (popSize * 0.067).toInt(),
+                        mutation = Mutation.n_bit(8),
                         evaluationOpponentAgent = DoNothingAgent(),
-                        parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.2),
+                        parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.121),
                         crossover = Crossover.Uniform,
-                        initializationMethod =  InitializationMethod.ISLA(0.3),
-                        fitnessFunction = FitnessFunction.Aggressive(),
-                        useVariableShipCount =  true,
-                ),
-                        RheaAgent(
-                                sequenceLength = 100,
-                                populationSize = 159,
-                                numberElites = (159*0.1742).toInt(),
-                                mutation = Mutation.Uniform(0.07538),
-                                evaluationOpponentAgent = DoNothingAgent(),
-                                parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.1388),
-                                crossover = Crossover.Uniform,
-                                initializationMethod =  InitializationMethod.None,
-                                fitnessFunction = FitnessFunction.Ratio,
-                                useVariableShipCount =  true,
+                        initializationMethod = InitializationMethod.None,
+                        fitnessFunction = FitnessFunction.Aggressive(
+                                p = 12.9,
+                                s = 2.5,
+                                t = 0.9
                         ),
-
+                        useVariableShipCount = true,
+                ),
+                RheaAgent(
+                        name = "Ships",
+                        sequenceLength = 194,
+                        populationSize = popSize,
+                        numberElites = (popSize * 0.09513517486976772).toInt(),
+                        mutation = Mutation.Uniform(0.12031591154944632),
+                        evaluationOpponentAgent = DoNothingAgent(),
+                        parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.3254484700263845),
+                        crossover = Crossover.Uniform,
+                        initializationMethod = InitializationMethod.None,
+                        fitnessFunction = FitnessFunction.Ships,
+                        useVariableShipCount = true,
+                ),
+                GreedyHeuristicAgent()
         )
     }
 }
 
+/**
+ * A data class to store the outcome of games against a specific opponent.
+ */
+data class HeadToHeadOutcome(
+        var wins: Int = 0,
+        var losses: Int = 0,
+        var draws: Int = 0
+)
+
+/**
+ * Modified LeagueEntry to include a map for head-to-head results.
+ */
+data class DetailedLeagueEntry(
+        val agentName: String,
+        var points: Int = 0,
+        var nGames: Int = 0,
+        var totalTimeAcrossAllGames: Long = 0,
+        var totalMovesAcrossAllGames: Int = 0,
+        // Map opponent name to the outcome of games
+        val outcomes: MutableMap<String, HeadToHeadOutcome> = mutableMapOf()
+)
 
 
 data class ConcurrentRoundRobinLeague(
         val agents: List<PlanetWarsAgent>,
-        val gamesPerPair: Int = 2,
-        val gameParams: GameParams = GameParams(numPlanets = 20),
+        val gamesPerPair: Int = 100,
+        val gameParams: GameParams = GameParams(numPlanets = 20, maxTicks = 1000),
 ) {
 
-    /**
-     * Eine private Datenklasse, um die Ergebnisse eines einzelnen Spielpaares zu kapseln.
-     * Dies hilft uns, die Ergebnisse aus den nebenläufigen Aufgaben sicher zu sammeln.
-     */
     private data class GamePairResult(
             val agent1Type: String,
             val agent2Type: String,
@@ -102,36 +133,30 @@ data class ConcurrentRoundRobinLeague(
             val totalMoves: Int
     )
 
-    /**
-     * Führt das Round-Robin-Turnier nebenläufig aus.
-     *
-     * @param concurrencyLevel Die maximale Anzahl von Spielen, die gleichzeitig ausgeführt werden sollen.
-     * Ein guter Standardwert ist die Anzahl der verfügbaren CPU-Kerne.
-     * @return Eine Map mit den finalen Liga-Einträgen für jeden Agenten.
-     */
-    suspend fun runRoundRobin(concurrencyLevel: Int = Runtime.getRuntime().availableProcessors()): Map<String, LeagueEntry> {
+    suspend fun runRoundRobin(concurrencyLevel: Int = Runtime.getRuntime().availableProcessors()): Map<String, DetailedLeagueEntry> {
         val tStart = System.currentTimeMillis()
-        val scores = agents.associate { it.getAgentType() to LeagueEntry(it.getAgentType()) }.toMutableMap()
+        val scores = agents.associate { agent ->
+            agent.getAgentType() to DetailedLeagueEntry(agent.getAgentType()).apply {
+                // Initialize the outcomes map for every potential opponent
+                agents.filter { it.getAgentType() != agent.getAgentType() }.forEach { opponent ->
+                    outcomes[opponent.getAgentType()] = HeadToHeadOutcome()
+                }
+            }
+        }.toMutableMap()
 
-        // Erstelle einen Dispatcher mit einer festen Anzahl von Threads.
         val dispatcher = Executors.newFixedThreadPool(concurrencyLevel).asCoroutineDispatcher()
-
-        // Erstelle einen Channel, um Ergebnisse von abgeschlossenen Spielen zu empfangen.
         val resultsChannel = Channel<GamePairResult>()
-        val totalGames = agents.size * (agents.size - 1)*gamesPerPair
+        val totalGames = agents.size * (agents.size - 1) * gamesPerPair
 
         coroutineScope {
-            // 1. Starte den "Konsumenten": eine einzelne Coroutine, die auf Ergebnisse wartet.
-            //    Dieser Block läuft parallel zu den Spielen.
             launch {
                 repeat(totalGames) { gameCounter ->
-                    // Empfange das nächste verfügbare Ergebnis vom Channel.
-                    // Diese Zeile pausiert, bis ein Spiel sein Ergebnis sendet.
                     val result = resultsChannel.receive()
 
-                    // Aktualisiere die Scores, sobald ein Ergebnis eintrifft.
                     val leagueEntry1 = scores[result.agent1Type]!!
                     val leagueEntry2 = scores[result.agent2Type]!!
+
+                    // Update total points and game counts
                     leagueEntry1.points += result.p1Points
                     leagueEntry2.points += result.p2Points
                     leagueEntry1.nGames += 1
@@ -141,7 +166,26 @@ data class ConcurrentRoundRobinLeague(
                     leagueEntry1.totalMovesAcrossAllGames += result.totalMoves
                     leagueEntry2.totalMovesAcrossAllGames += result.totalMoves
 
-                    // Aktualisiere die Fortschrittsanzeige in Echtzeit.
+                    // Update head-to-head outcomes
+                    val outcome1 = leagueEntry1.outcomes[result.agent2Type]!!
+                    val outcome2 = leagueEntry2.outcomes[result.agent1Type]!!
+
+                    when {
+                        result.p1Points > result.p2Points -> { // Agent 1 wins
+                            outcome1.wins++
+                            outcome2.losses++
+                        }
+                        result.p2Points > result.p1Points -> { // Agent 2 wins
+                            outcome1.losses++
+                            outcome2.wins++
+                        }
+                        else -> { // Draw
+                            outcome1.draws++
+                            outcome2.draws++
+                        }
+                    }
+
+
                     val currentProgress = gameCounter + 1
                     val elapsed = System.currentTimeMillis() - tStart
                     val avgPerGame = elapsed.toDouble() / currentProgress
@@ -158,7 +202,6 @@ data class ConcurrentRoundRobinLeague(
                 }
             }
 
-            // 2. Starte die "Produzenten": alle Spiel-Paare als nebenläufige Aufgaben.
             for (i in agents.indices) {
                 for (j in agents.indices) {
                     if (i == j) continue
@@ -166,7 +209,7 @@ data class ConcurrentRoundRobinLeague(
                     val agent1 = agents[i]
                     val agent2 = agents[j]
 
-                    repeat(gamesPerPair){
+                    repeat(gamesPerPair) {
                         launch(dispatcher) {
                             val gameRunner = GameRunner(agent1, agent2, gameParams)
                             val result = gameRunner.runGames(1)
@@ -179,15 +222,13 @@ data class ConcurrentRoundRobinLeague(
                                     agent2Time = gameRunner.agent2TotalTime,
                                     totalMoves = gameRunner.totalMoves
                             )
-                            // Sende das Ergebnis an den Channel, sobald das Spiel fertig ist.
                             resultsChannel.send(gamePairResult)
                         }
                     }
                 }
             }
-        } // coroutineScope wartet, bis sowohl der Konsument als auch alle Produzenten fertig sind.
+        }
 
-        // Aufräumen
         dispatcher.close()
         resultsChannel.close()
 

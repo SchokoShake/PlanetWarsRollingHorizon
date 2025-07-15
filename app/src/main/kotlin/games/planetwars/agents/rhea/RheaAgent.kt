@@ -12,12 +12,13 @@ import games.planetwars.core.Player
 import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.random.Random
+
 data class RheaGameStateWrapper(
-        val gameState: GameState,
-        val params: GameParams,
-        val player: Player,
-        val opponentModel: PlanetWarsAgent = DoNothingAgent(),
-        val useVariableShipCount: Boolean = false
+    var gameState: GameState,
+    val params: GameParams,
+    val player: Player,
+    val opponentModel: PlanetWarsAgent = DoNothingAgent(),
+    val useVariableShipCount: Boolean = false
 ) {
     var forwardModel = ForwardModel(gameState, params)
 
@@ -72,8 +73,8 @@ data class RheaGameStateWrapper(
             val from = seq[ix]
             val to = seq[ix + 1]
             val frac = if (useVariableShipCount) seq[ix + 2] else 0.5f
-            val myAction = getAction(gameState, from, to, frac)
-            val opponentAction = opponentModel.getAction(gameState)
+            val myAction = getAction(forwardModel.state, from, to, frac)
+            val opponentAction = opponentModel.getAction(forwardModel.state)
             val actions = mapOf(player to myAction, player.opponent() to opponentAction)
             forwardModel.step(actions)
             ix += shift
@@ -198,6 +199,7 @@ sealed class ParentSelectionStrategy {
 }
 
 data class RheaAgent(
+        var name: String ="",
         var sequenceLength: Int = 200,
         var populationSize: Int = 20,
         var numberElites: Int = 5,
@@ -607,7 +609,10 @@ data class RheaAgent(
     }
 
     override fun getAgentType(): String {
-        return "RheaAgent-$sequenceLength-$populationSize-$numberElites-$mutation-(${evaluationOpponentAgent.getAgentType()})-$parentSelectionStrategy-$crossover-$fitnessFunction-$initializationMethod-$useVariableShipCount"
+        if(name!=""){
+            return name
+        }
+        return "Rhea-$name-$sequenceLength-$populationSize-$numberElites-$mutation-(${evaluationOpponentAgent.getAgentType()})-$parentSelectionStrategy-$crossover-$fitnessFunction-$initializationMethod-$useVariableShipCount"
     }
 
     private fun randomSequence(length: Int): FloatArray {
@@ -730,7 +735,7 @@ data class RheaAgent(
 
     private fun evaluateSequence(state: GameState, sequence: FloatArray): Double {
         evaluationOpponentAgent.prepareToPlayAs(player = player.opponent(), params = params)
-        val wrapper = RheaGameStateWrapper(state.deepCopy(), params, player, evaluationOpponentAgent, useVariableShipCount = useVariableShipCount)
+        val wrapper = RheaGameStateWrapper(state, params, player, evaluationOpponentAgent, useVariableShipCount = useVariableShipCount)
         wrapper.runForwardModel(sequence)
 
         return evaluateState(wrapper.forwardModel,player)

@@ -1,9 +1,25 @@
 package games.planetwars.runners
 
+import games.planetwars.agents.DoNothingAgent
 import games.planetwars.agents.PlanetWarsAgent
 import games.planetwars.agents.random.BetterRandomAgent
-import games.planetwars.agents.random.PureRandomAgent
-import games.planetwars.core.*
+import games.planetwars.agents.rhea.Crossover
+import games.planetwars.agents.rhea.FitnessFunction
+import games.planetwars.agents.rhea.InitializationMethod
+import games.planetwars.agents.rhea.Mutation
+import games.planetwars.agents.rhea.ParentSelectionStrategy
+import games.planetwars.agents.rhea.RheaAgent
+import games.planetwars.core.ForwardModel
+import games.planetwars.core.GameParams
+import games.planetwars.core.GameState
+import games.planetwars.core.GameStateFactory
+import games.planetwars.core.Player
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 
 data class GameRunner(
     val agent1: PlanetWarsAgent,
@@ -17,15 +33,35 @@ data class GameRunner(
         newGame()
     }
 
-    fun runGame() : ForwardModel {
-        // runs with a fresh copy of the game state each time
-//        val forwardModel = ForwardModel(gameState.deepCopy(), gameParams)
+    var agent1TotalTime = 0L
+    var agent2TotalTime = 0L
+    var totalMoves = 0
 
+    init {
+        newGame()
+    }
+
+    fun runGame() : ForwardModel {
         newGame()
         while (!forwardModel.isTerminal()) {
+
+
+            val p1start = System.currentTimeMillis()
+            val p1action = Player.Player1 to agent1.getAction(forwardModel.state.deepCopy())
+            val p1time = System.currentTimeMillis() - p1start
+
+            val p2start = System.currentTimeMillis()
+            val p2action = Player.Player2 to agent2.getAction(forwardModel.state.deepCopy())
+            val p2time = System.currentTimeMillis() - p2start
+
+
+            agent1TotalTime += p1time
+            agent2TotalTime += p2time
+            totalMoves++
+
             val actions = mapOf(
-                Player.Player1 to agent1.getAction(forwardModel.state.deepCopy()),
-                Player.Player2 to agent2.getAction(forwardModel.state.deepCopy()),
+                    p1action,
+                    p2action
             )
             forwardModel.step(actions)
         }
@@ -39,7 +75,13 @@ data class GameRunner(
         forwardModel = ForwardModel(gameState.deepCopy(), gameParams)
         agent1.prepareToPlayAs(Player.Player1, gameParams)
         agent2.prepareToPlayAs(Player.Player2, gameParams)
+
+        agent1TotalTime = 0L
+        agent2TotalTime = 0L
+        totalMoves = 0
     }
+
+
 
     fun stepGame() : ForwardModel {
         if (forwardModel.isTerminal()) {
@@ -64,25 +106,57 @@ data class GameRunner(
 
         return scores
     }
+    suspend fun runGamesConcurrently(nGames: Int,concurrencyLimit:Int=20): Map<Player, Int> = withContext(Dispatchers.Default) {
+        val semaphore = Semaphore(concurrencyLimit)
+
+        val scores = mutableMapOf(Player.Player1 to 0, Player.Player2 to 0, Player.Neutral to 0)
+
+        val jobs = (1..nGames).map {
+            async {
+                // Each coroutine will suspend here until a permit is available.
+                semaphore.withPermit {
+                    val runner = GameRunner(agent1, agent2, gameParams)
+                    runner.runGame().getLeader()
+                }
+            }
+        }
+
+        val results = jobs.awaitAll()
+
+        for (winner in results) {
+            scores[winner] = scores.getOrDefault(winner, 0) + 1
+        }
+
+        scores
+}
 }
 
 fun main() {
     val gameParams = GameParams(numPlanets = 20)
 //    val gameState = GameStateFactory(gameParams).createGame()
-    val agent1 = PureRandomAgent()
+    val agent1 = RheaAgent(
+        sequenceLength = 100,
+        populationSize = 159,
+        numberElites = (159*0.1742).toInt(),
+        mutation = Mutation.Uniform(0.07538),
+        evaluationOpponentAgent = DoNothingAgent(),
+        parentSelectionStrategy = ParentSelectionStrategy.Tournament(0.1388),
+        crossover = Crossover.Uniform,
+        initializationMethod =  InitializationMethod.None,
+        fitnessFunction = FitnessFunction.Ratio,
+        useVariableShipCount =  true,
+    )
     val agent2 = BetterRandomAgent()
     val gameRunner = GameRunner(agent1, agent2, gameParams)
     val finalModel = gameRunner.runGame()
     println("Game over!")
     println(finalModel.statusString())
-    // time to run a bunch of games
-    val nGames = 1000
+    val nGames = 1
     val t = System.currentTimeMillis()
     val results = gameRunner.runGames(nGames)
     val dt = System.currentTimeMillis() - t
     println(results)
     println("Time per game: ${dt.toDouble() / nGames} ms")
-    // also print time per step
     val nSteps = ForwardModel.nUpdates
     println("Time per step: ${dt.toDouble() / nSteps} ms")
 
